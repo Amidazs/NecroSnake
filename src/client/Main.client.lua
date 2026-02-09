@@ -1,9 +1,11 @@
 print("[Client] Booting NecroSnake client")
 
 local UnitBillboardService = require(script.Parent.Services.UnitBillboardService)
-UnitBillboardService.start()
+local billboardService = UnitBillboardService.new()
+billboardService:init()
 
 local UnitHighlightService = require(script.Parent.Services.UnitHighlightService)
-UnitHighlightService.start()
+local highlightService = UnitHighlightService.new()
+highlightService:init()
 
 print("[Client] Client boot complete")
