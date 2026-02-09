@@ -2,25 +2,20 @@
   "name": "NecroSnake",
   "tree": {
     "$className": "DataModel",
+
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "Shared": {
-        "$path": "src/shared"
-      }
+      "_Root": { "$path": "src/ReplicatedStorage.rbxmx" }
     },
+
     "ServerScriptService": {
       "$className": "ServerScriptService",
-      "Server": {
-        "$path": "src/server"
-      }
+      "_Root": { "$path": "src/ServerScriptService.rbxmx" }
     },
+
     "StarterPlayer": {
       "$className": "StarterPlayer",
-      "StarterPlayerScripts": {
-        "Client": {
-          "$path": "src/client"
-        }
-      }
+      "_Root": { "$path": "src/StarterPlayer.rbxmx" }
     }
   }
 }

@@ -1,0 +1,119 @@
+<roblox version="4">
+  <Item class="StarterPlayer" referent="0">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+      <bool name="AllowCustomAnimations">true</bool>
+      <BinaryString name="AttributesSerialize"></BinaryString>
+      <bool name="AutoJumpEnabled">true</bool>
+      <token name="AvatarJointUpgrade_SerializedRollout">0</token>
+      <float name="CameraMaxZoomDistance">128</float>
+      <float name="CameraMinZoomDistance">0.5</float>
+      <token name="CameraMode">0</token>
+      <bool name="CharacterBreakJointsOnDeath">true</bool>
+      <float name="CharacterJumpHeight">7.2</float>
+      <float name="CharacterJumpPower">50</float>
+      <float name="CharacterMaxSlopeAngle">89</float>
+      <bool name="CharacterUseJumpPower">false</bool>
+      <float name="CharacterWalkSpeed">16</float>
+      <bool name="ClassicDeath">true</bool>
+      <bool name="CreateDefaultPlayerModule">true</bool>
+      <bool name="DefinesCapabilities">false</bool>
+      <token name="DevCameraOcclusionMode">0</token>
+      <token name="DevComputerCameraMovementMode">0</token>
+      <token name="DevComputerMovementMode">0</token>
+      <token name="DevTouchCameraMovementMode">0</token>
+      <token name="DevTouchMovementMode">0</token>
+      <token name="EnableDynamicHeads">0</token>
+      <bool name="EnableMouseLockOption">true</bool>
+      <int64 name="GameSettingsAssetIDFace">0</int64>
+      <int64 name="GameSettingsAssetIDHead">0</int64>
+      <int64 name="GameSettingsAssetIDLeftArm">0</int64>
+      <int64 name="GameSettingsAssetIDLeftLeg">0</int64>
+      <int64 name="GameSettingsAssetIDPants">0</int64>
+      <int64 name="GameSettingsAssetIDRightArm">0</int64>
+      <int64 name="GameSettingsAssetIDRightLeg">0</int64>
+      <int64 name="GameSettingsAssetIDShirt">0</int64>
+      <int64 name="GameSettingsAssetIDTeeShirt">0</int64>
+      <int64 name="GameSettingsAssetIDTorso">0</int64>
+      <token name="GameSettingsAvatar">1</token>
+      <token name="GameSettingsR15Collision">0</token>
+      <NumberRange name="GameSettingsScaleRangeBodyType">0 1 </NumberRange>
+      <NumberRange name="GameSettingsScaleRangeHead">0.95 1 </NumberRange>
+      <NumberRange name="GameSettingsScaleRangeHeight">0.9 1.05 </NumberRange>
+      <NumberRange name="GameSettingsScaleRangeProportion">0 1 </NumberRange>
+      <NumberRange name="GameSettingsScaleRangeWidth">0.7 1 </NumberRange>
+      <float name="HealthDisplayDistance">100</float>
+      <bool name="LoadCharacterAppearance">true</bool>
+      <token name="LoadCharacterLayeredClothing">0</token>
+      <token name="LuaCharacterController">0</token>
+      <float name="NameDisplayDistance">100</float>
+      <int64 name="SourceAssetId">-1</int64>
+      <BinaryString name="Tags"></BinaryString>
+      <bool name="UserEmotesEnabled">true</bool>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="1">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+        <BinaryString name="AttributesSerialize"></BinaryString>
+        <bool name="DefinesCapabilities">false</bool>
+        <int64 name="SourceAssetId">-1</int64>
+        <BinaryString name="Tags"></BinaryString>
+      </Properties>
+      <Item class="LocalScript" referent="2">
+        <Properties>
+          <string name="Name">NecroMVP_WeaponClient</string>
+          <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+          <bool name="DefinesCapabilities">false</bool>
+          <bool name="Disabled">false</bool>
+          <Content name="LinkedSource">
+            <null>
+            </null>
+          </Content>
+          <token name="RunContext">0</token>
+          <BinaryString name="ScriptGuid"><![CDATA[ezNFNjA3QUI4LUNDRTMtNDM3Ni05RkQxLTQ3NTE4RDZFOEFEN30=]]></BinaryString>
+          <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local remote = ReplicatedStorage:WaitForChild("NecroMVP_Swing")
+local player = Players.LocalPlayer
+
+local function connect_tool(tool)
+	if tool.Name ~= "Bone Sword" then
+		return
+	end
+
+	tool.Activated:Connect(function()
+		remote:FireServer()
+	end)
+end
+
+local function on_character_added()
+	local backpack = player:WaitForChild("Backpack")
+	backpack.ChildAdded:Connect(connect_tool)
+	for _, t in ipairs(backpack:GetChildren()) do
+		connect_tool(t)
+	end
+end
+
+if player.Character then
+	on_character_added()
+end
+
+player.CharacterAdded:Connect(on_character_added)
+]]></string>
+          <int64 name="SourceAssetId">-1</int64>
+          <BinaryString name="Tags"></BinaryString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="StarterCharacterScripts" referent="3">
+      <Properties>
+        <string name="Name">StarterCharacterScripts</string>
+        <BinaryString name="AttributesSerialize"></BinaryString>
+        <bool name="DefinesCapabilities">false</bool>
+        <int64 name="SourceAssetId">-1</int64>
+        <BinaryString name="Tags"></BinaryString>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>

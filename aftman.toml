@@ -1,2 +1,3 @@
-[tools]
+﻿[tools]
 rojo = "rojo-rbx/rojo@7.7.0-rc.1"
+remodel = "rojo-rbx/remodel@0.11.0"

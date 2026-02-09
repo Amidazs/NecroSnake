@@ -1,0 +1,2131 @@
+<roblox version="4">
+  <Item class="ServerScriptService" referent="0">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+      <BinaryString name="AttributesSerialize"></BinaryString>
+      <bool name="DefinesCapabilities">false</bool>
+      <bool name="LoadStringEnabled">false</bool>
+      <int64 name="SourceAssetId">-1</int64>
+      <BinaryString name="Tags"></BinaryString>
+    </Properties>
+    <Item class="Folder" referent="1">
+      <Properties>
+        <string name="Name">NecromancerMVP_Server</string>
+        <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+        <bool name="DefinesCapabilities">false</bool>
+        <int64 name="SourceAssetId">-1</int64>
+        <BinaryString name="Tags"></BinaryString>
+      </Properties>
+      <Item class="Folder" referent="2">
+        <Properties>
+          <string name="Name">Systems</string>
+          <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+          <bool name="DefinesCapabilities">false</bool>
+          <int64 name="SourceAssetId">-1</int64>
+          <BinaryString name="Tags"></BinaryString>
+        </Properties>
+        <Item class="ModuleScript" referent="3">
+          <Properties>
+            <string name="Name">GameConfig</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezNBNzFEMzgwLTEwMjEtNEU1Ni05NERELUQ0RjJFNjY1RTlDRX0=]]></BinaryString>
+            <string name="Source"><![CDATA[local GameConfig = {}
+
+GameConfig.Units = {
+	WeakSkeleton = {
+		Health = 20,
+		Damage = 3,
+		Size = 1.8,
+		Color = Color3.fromRGB(175, 175, 175),
+		Mass = 0.8,
+	},
+	Skeleton = {
+		Health = 35,
+		Damage = 5,
+		Size = 2.0,
+		Color = Color3.fromRGB(200, 200, 200),
+		Mass = 1.0,
+	},
+	ZombieBrute = {
+		Health = 150,
+		Damage = 15,
+		Size = 3.2,
+		Color = Color3.fromRGB(100, 150, 100),
+		Mass = 5.0,
+	},
+	DarkKnight = {
+		Health = 500,
+		Damage = 40,
+		Size = 4.2,
+		Color = Color3.fromRGB(50, 0, 50),
+		Mass = 15.0,
+	},
+}
+
+GameConfig.PlayerBaseHealth = 120
+GameConfig.PlayerBaseDamage = 12
+
+-- TEST: start strong (8 strong units)
+GameConfig.PlayerArmy = {
+	StartCount = 8,
+	StartType = "ZombieBrute",
+}
+
+GameConfig.Formation = {
+	GoldenAngle = 137.5 * (math.pi / 180),
+	InnerCapacity = 10,
+	InnerSpacing = 3.2,
+	OuterSpacing = 5.0,
+	OuterRadiusBoost = 16,
+}
+
+GameConfig.Combat = {
+	AttackRange = 12,
+	AttackCooldown = 0.5,
+	CombatLockSeconds = 1.5,
+}
+
+GameConfig.HealthBar = {
+	Enabled = true,
+	MaxDistance = 70, -- LOWER RANGE
+	StudsOffset = Vector3.new(0, 3.8, 0),
+	Size = UDim2.new(0, 84, 0, 18),
+}
+
+GameConfig.Arena = {
+	Center = Vector3.new(0, 0, 0),
+	HalfSize = Vector3.new(420, 0, 420),
+	GroundY = 1,
+}
+
+GameConfig.Roam = {
+	-- slightly slower than default player (16)
+	MaxVelocity = 13,
+	Responsiveness = 4.2,
+	MaxForce = 30000,
+	MaxTorque = 30000,
+	TargetUpdateMinSeconds = 0.9,
+	TargetUpdateMaxSeconds = 2.0,
+}
+
+GameConfig.AI = {
+	SenseRange = 120,
+	ChaseStopRange = 14,
+	FleeDistance = 80,
+	Hysteresis = 1.10,
+	WanderJitterStuds = 22,
+}
+
+GameConfig.RaiseChanceBase = 0.35
+
+GameConfig.Regen = {
+	TickSeconds = 1.0,
+	UnitHealPerTick = 1,
+	PlayerHealPerTick = 1,
+}
+
+GameConfig.Weapon = {
+	SwingCooldown = 0.35,
+	HitboxSize = Vector3.new(6, 5, 7),
+	HitboxForwardStuds = 5,
+	Damage = 18,
+}
+
+GameConfig.CommonNPC = {
+	SpawnIntervalSeconds = 2.3,
+	MaxAliveUnits = 60,
+	GroupSpawnRadius = 10,
+	GroupCompositions = {
+		{ "WeakSkeleton", "WeakSkeleton", "WeakSkeleton" },
+		{ "Skeleton", "WeakSkeleton", "WeakSkeleton" },
+		{ "Skeleton", "Skeleton", "WeakSkeleton" },
+		{ "Skeleton", "Skeleton", "Skeleton" },
+		{ "ZombieBrute", "WeakSkeleton", "WeakSkeleton" },
+		{ "ZombieBrute", "Skeleton", "WeakSkeleton" },
+		{ "ZombieBrute", "Skeleton", "Skeleton" },
+	},
+}
+
+GameConfig.RareNPC = {
+	SpawnCheckSeconds = 5.5,
+	SpawnChance = 0.22,
+	MaxAlive = 2,
+	Named = {
+		{
+			Name = "Grave Baron",
+			ModelKey = "GraveBaron",
+			LeaderHP = 950,
+			LeaderDamage = 32,
+			LeaderColor = Color3.fromRGB(90, 0, 120),
+			BossRaiseType = "DarkKnight",
+			Army = {
+				{ Type = "ZombieBrute", Count = 3 },
+				{ Type = "Skeleton", Count = 6 },
+			},
+		},
+		{
+			Name = "Crypt Warden",
+			ModelKey = "CryptWarden",
+			LeaderHP = 800,
+			LeaderDamage = 28,
+			LeaderColor = Color3.fromRGB(20, 80, 120),
+			BossRaiseType = "DarkKnight",
+			Army = {
+				{ Type = "ZombieBrute", Count = 2 },
+				{ Type = "Skeleton", Count = 7 },
+			},
+		},
+	},
+}
+
+return GameConfig
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="4">
+          <Properties>
+            <string name="Name">ModelLibraryService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[e0FFRUM4MURFLUM2RjktNEEyOS04NjJCLUYwNDc4NzRGNEE2Qn0=]]></BinaryString>
+            <string name="Source"><![CDATA[local ModelLibraryService = {}
+
+local Workspace = game:GetService("Workspace")
+
+local function get_library()
+	local world_root = Workspace:FindFirstChild("NecromancerMVP_World")
+	if not world_root then
+		return nil
+	end
+	return world_root:FindFirstChild("ModelLibrary")
+end
+
+local function disable_collisions(root)
+	for _, inst in ipairs(root:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.CanCollide = false
+			inst.CanTouch = false
+			inst.CanQuery = false
+			inst.Anchored = false
+			inst.Massless = true
+		end
+	end
+end
+
+local function ensure_primary_part(model)
+	if model.PrimaryPart then
+		return
+	end
+	local part = model:FindFirstChildWhichIsA("BasePart", true)
+	if part then
+		model.PrimaryPart = part
+	end
+end
+
+local function is_under_animation_container(inst)
+	local parent = inst.Parent
+	while parent do
+		if parent:IsA("AnimationController") or parent:IsA("Animator") then
+			return true
+		end
+		parent = parent.Parent
+	end
+	return false
+end
+
+local function remove_conflicting_scripts(root)
+	for _, inst in ipairs(root:GetDescendants()) do
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
+			-- Keep anything directly under animation containers.
+			if not is_under_animation_container(inst) then
+				inst:Destroy()
+			end
+		end
+	end
+end
+
+function ModelLibraryService.SanitizeLibrary()
+	local library = get_library()
+	if not library then
+		warn("ModelLibraryService: Missing ModelLibrary.")
+		return
+	end
+
+	local cleaned = 0
+	for _, child in ipairs(library:GetChildren()) do
+		if child:IsA("Model") then
+			disable_collisions(child)
+			ensure_primary_part(child)
+			remove_conflicting_scripts(child)
+			cleaned += 1
+		end
+	end
+
+	print(string.format(
+		"ModelLibrary sanitized (%d models). Anim containers kept; collisions disabled.",
+		cleaned
+	))
+end
+
+function ModelLibraryService.GetTemplate(model_key)
+	local library = get_library()
+	if not library then
+		return nil
+	end
+
+	local model = library:FindFirstChild(model_key)
+	if model and model:IsA("Model") then
+		return model
+	end
+
+	return nil
+end
+
+return ModelLibraryService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="5">
+          <Properties>
+            <string name="Name">UnitModelService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezBCNTk5Rjg4LTNFMDctNDE1MS1CNTAxLUNERkFDMzU4MEZGQX0=]]></BinaryString>
+            <string name="Source"><![CDATA[local UnitModelService = {}
+
+local ModelLibraryService = require(script.Parent.ModelLibraryService)
+
+local function clear_visuals(core_part)
+	for _, child in ipairs(core_part:GetChildren()) do
+		if child:IsA("Model") and child.Name == "Visual" then
+			child:Destroy()
+		end
+	end
+end
+
+local function weld_model_to_core(model, core_part)
+	if not model.PrimaryPart then
+		local part = model:FindFirstChildWhichIsA("BasePart", true)
+		if not part then
+			return false
+		end
+		model.PrimaryPart = part
+	end
+
+	model:SetPrimaryPartCFrame(core_part.CFrame)
+
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.Anchored = false
+			part.Massless = true
+
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = core_part
+			weld.Part1 = part
+			weld.Parent = part
+		end
+	end
+
+	return true
+end
+
+function UnitModelService.ApplyModel(core_part, model_key)
+	if not core_part or not core_part:IsA("BasePart") then
+		return
+	end
+
+	local template = ModelLibraryService.GetTemplate(model_key)
+	if not template then
+		core_part.Transparency = 0
+		return
+	end
+
+	clear_visuals(core_part)
+
+	local visual = template:Clone()
+	visual.Name = "Visual"
+	visual.Parent = core_part
+
+	local ok = weld_model_to_core(visual, core_part)
+	if ok then
+		core_part.Transparency = 1
+	else
+		visual:Destroy()
+		core_part.Transparency = 0
+	end
+end
+
+return UnitModelService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="6">
+          <Properties>
+            <string name="Name">VisualService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezgxNzYzOENGLUE5NEUtNEUzRC05QTYwLTdGQTAzMTM3NjE4MH0=]]></BinaryString>
+            <string name="Source"><![CDATA[local VisualService = {}
+
+local GameConfig = require(script.Parent.GameConfig)
+
+local function clamp01(x)
+	if x < 0 then
+		return 0
+	end
+	if x > 1 then
+		return 1
+	end
+	return x
+end
+
+local function build_healthbar_gui(adornee_part)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "HealthBar"
+	gui.Adornee = adornee_part
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = GameConfig.HealthBar.MaxDistance
+	gui.StudsOffset = GameConfig.HealthBar.StudsOffset
+	gui.Size = GameConfig.HealthBar.Size
+
+	local name_label = Instance.new("TextLabel")
+	name_label.Name = "Name"
+	name_label.BackgroundTransparency = 1
+	name_label.Size = UDim2.new(1, 0, 0, 10)
+	name_label.Position = UDim2.new(0, 0, 0, 0)
+	name_label.TextScaled = true
+	name_label.Font = Enum.Font.GothamBold
+	name_label.TextColor3 = Color3.fromRGB(235, 235, 235)
+	name_label.TextStrokeTransparency = 0.4
+	name_label.Parent = gui
+
+	local bg = Instance.new("Frame")
+	bg.Name = "BG"
+	bg.Size = UDim2.new(1, 0, 0, 8)
+	bg.Position = UDim2.new(0, 0, 0, 10)
+	bg.BorderSizePixel = 0
+	bg.BackgroundTransparency = 0.25
+	bg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	bg.Parent = gui
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+
+	return gui
+end
+
+local function update_fill(bar_gui, hp, max_hp)
+	local bg = bar_gui:FindFirstChild("BG")
+	if not bg then
+		return
+	end
+
+	local fill = bg:FindFirstChild("Fill")
+	if not fill then
+		return
+	end
+
+	local denom = max_hp
+	if typeof(denom) ~= "number" or denom <= 0 then
+		denom = 1
+	end
+
+	local ratio = clamp01(hp / denom)
+	fill.Size = UDim2.new(ratio, 0, 1, 0)
+
+	if ratio > 0.6 then
+		fill.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+	elseif ratio > 0.3 then
+		fill.BackgroundColor3 = Color3.fromRGB(240, 200, 60)
+	else
+		fill.BackgroundColor3 = Color3.fromRGB(230, 70, 70)
+	end
+end
+
+local function update_name(bar_gui, part)
+	local label = bar_gui:FindFirstChild("Name")
+	if not label then
+		return
+	end
+
+	local display_name = part:GetAttribute("DisplayName") or part.Name or "Unit"
+	label.Text = tostring(display_name)
+
+	local is_named = part:GetAttribute("IsNamedNPC") == true
+	if is_named then
+		label.TextColor3 = Color3.fromRGB(230, 60, 60) -- red name
+	else
+		label.TextColor3 = Color3.fromRGB(235, 235, 235)
+	end
+end
+
+function VisualService.AttachHealthBar(part)
+	if not GameConfig.HealthBar.Enabled then
+		return
+	end
+	if not part or not part:IsA("BasePart") then
+		return
+	end
+	if part:FindFirstChild("HealthBar") then
+		return
+	end
+
+	local max_hp = part:GetAttribute("MaxHP") or part:GetAttribute("HP") or 1
+	local hp = part:GetAttribute("HP") or max_hp
+
+	local gui = build_healthbar_gui(part)
+	gui.Parent = part
+
+	update_name(gui, part)
+	update_fill(gui, hp, max_hp)
+
+	part:GetAttributeChangedSignal("HP"):Connect(function()
+		if not part.Parent then
+			return
+		end
+		update_fill(gui, part:GetAttribute("HP") or 0, part:GetAttribute("MaxHP") or max_hp)
+	end)
+
+	part:GetAttributeChangedSignal("MaxHP"):Connect(function()
+		if not part.Parent then
+			return
+		end
+		update_fill(gui, part:GetAttribute("HP") or 0, part:GetAttribute("MaxHP") or max_hp)
+	end)
+
+	part:GetAttributeChangedSignal("DisplayName"):Connect(function()
+		if not part.Parent then
+			return
+		end
+		update_name(gui, part)
+	end)
+
+	part:GetAttributeChangedSignal("IsNamedNPC"):Connect(function()
+		if not part.Parent then
+			return
+		end
+		update_name(gui, part)
+	end)
+end
+
+return VisualService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="7">
+          <Properties>
+            <string name="Name">AttackFxService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[e0UxMDNEODY0LTM4QjUtNDlFMi05MTg3LUVGRDg4QTJENUI2QX0=]]></BinaryString>
+            <string name="Source"><![CDATA[local AttackFxService = {}
+
+local Debris = game:GetService("Debris")
+
+function AttackFxService.Play(attacker_part)
+	if not attacker_part or not attacker_part:IsA("BasePart") then
+		return
+	end
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "AttackSlash"
+	emitter.Rate = 0
+	emitter.Lifetime = NumberRange.new(0.12, 0.18)
+	emitter.Speed = NumberRange.new(10, 14)
+	emitter.SpreadAngle = Vector2.new(25, 25)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-120, 120)
+	emitter.LightEmission = 1
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Parent = attacker_part
+	emitter:Emit(10)
+
+	Debris:AddItem(emitter, 0.25)
+end
+
+return AttackFxService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="8">
+          <Properties>
+            <string name="Name">ArmyService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezBCMTAzMUE0LTY5RkItNDVFNi1CNzE1LTlBRDQxQjNDMzQ1QX0=]]></BinaryString>
+            <string name="Source"><![CDATA[local ArmyService = {}
+
+local PhysicsService = game:GetService("PhysicsService")
+local RunService = game:GetService("RunService")
+
+local GameConfig = require(script.Parent.GameConfig)
+local VisualService = require(script.Parent.VisualService)
+local UnitModelService = require(script.Parent.UnitModelService)
+
+local COLLISION_NPC_UNITS = "NecroUnits"
+local COLLISION_NPC_LEADERS = "NecroLeaders"
+local COLLISION_PLAYER = "NecroPlayer"
+local COLLISION_PLAYER_UNITS = "NecroPlayerUnits"
+
+local active_armies = {}
+local roam_units = {}
+local roam_leaders = {}
+
+local function register_collision_groups()
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_NPC_UNITS)
+	end)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_NPC_LEADERS)
+	end)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_PLAYER)
+	end)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_PLAYER_UNITS)
+	end)
+
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_NPC_UNITS, COLLISION_NPC_UNITS, false)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_PLAYER_UNITS, COLLISION_PLAYER_UNITS, false)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_PLAYER_UNITS, COLLISION_NPC_UNITS, true)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_PLAYER_UNITS, COLLISION_NPC_LEADERS, true)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_PLAYER_UNITS, COLLISION_PLAYER, false)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_NPC_UNITS, COLLISION_PLAYER, true)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_NPC_LEADERS, COLLISION_PLAYER, true)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_NPC_UNITS, COLLISION_NPC_LEADERS, false)
+end
+
+local function assign_collision(part, group_name)
+	if part and part:IsA("BasePart") then
+		part.CollisionGroup = group_name
+	end
+end
+
+local function build_mover(part)
+	local attach0 = Instance.new("Attachment")
+	attach0.Parent = part
+
+	local align_pos = Instance.new("AlignPosition")
+	align_pos.Mode = Enum.PositionAlignmentMode.OneAttachment
+	align_pos.Attachment0 = attach0
+	align_pos.MaxForce = GameConfig.Roam.MaxForce
+	align_pos.Responsiveness = GameConfig.Roam.Responsiveness
+	align_pos.MaxVelocity = GameConfig.Roam.MaxVelocity
+	align_pos.Parent = part
+
+	local align_rot = Instance.new("AlignOrientation")
+	align_rot.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align_rot.Attachment0 = attach0
+	align_rot.MaxTorque = GameConfig.Roam.MaxTorque
+	align_rot.Responsiveness = GameConfig.Roam.Responsiveness
+	align_rot.Parent = part
+
+	return align_pos
+end
+
+local function apply_collision_to_character(character)
+	for _, inst in ipairs(character:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			assign_collision(inst, COLLISION_PLAYER)
+		end
+	end
+end
+
+function ArmyService.Start(world_units_folder, world_leaders_folder)
+	ArmyService._units_folder = world_units_folder
+	ArmyService._leaders_folder = world_leaders_folder
+
+	register_collision_groups()
+
+	print("ArmyService: Ready.")
+
+	RunService.Heartbeat:Connect(function()
+		for _, army in pairs(active_armies) do
+			if army.Leader and army.Leader.Parent then
+				ArmyService.UpdateFormation(army)
+			end
+		end
+	end)
+end
+
+function ArmyService.BindPlayerCharacterCollision(character)
+	if not character then
+		return
+	end
+
+	apply_collision_to_character(character)
+
+	character.DescendantAdded:Connect(function(inst)
+		if inst:IsA("BasePart") then
+			assign_collision(inst, COLLISION_PLAYER)
+		end
+	end)
+end
+
+function ArmyService.ClearArmyUnits(owner_id)
+	local army = active_armies[owner_id]
+	if not army then
+		return
+	end
+
+	for _, data in ipairs(army.Units) do
+		if data.Instance and data.Instance.Parent then
+			data.Instance:Destroy()
+		end
+	end
+
+	army.Units = {}
+	army.NextFormationIndex = 1
+end
+
+function ArmyService.CreateArmy(owner_id, leader_part, leader_kind, start_army_definition)
+	if active_armies[owner_id] then
+		ArmyService.ClearArmyUnits(owner_id)
+		active_armies[owner_id].Leader = leader_part
+		active_armies[owner_id].LeaderKind = leader_kind
+	else
+		active_armies[owner_id] = {
+			OwnerId = owner_id,
+			Leader = leader_part,
+			LeaderKind = leader_kind,
+			Units = {},
+			NextFormationIndex = 1,
+		}
+	end
+
+	leader_part:SetAttribute("OwnerId", owner_id)
+	leader_part:SetAttribute("Kind", "Leader")
+	leader_part:SetAttribute("LeaderKind", leader_kind)
+
+	if leader_kind == "Player" then
+		assign_collision(leader_part, COLLISION_PLAYER)
+	else
+		assign_collision(leader_part, COLLISION_NPC_LEADERS)
+	end
+
+	VisualService.AttachHealthBar(leader_part)
+
+	local model_key = leader_part:GetAttribute("ModelKey")
+	if typeof(model_key) == "string" and model_key ~= "" then
+		UnitModelService.ApplyModel(leader_part, model_key)
+	end
+
+	if leader_kind == "Player" then
+		for _ = 1, GameConfig.PlayerArmy.StartCount do
+			ArmyService.AddUnitToArmy(owner_id, GameConfig.PlayerArmy.StartType)
+		end
+		return
+	end
+
+	if typeof(start_army_definition) == "table" then
+		for _, entry in ipairs(start_army_definition) do
+			if typeof(entry) == "table" then
+				local unit_type = entry.Type
+				local count = entry.Count
+				if typeof(unit_type) == "string" and typeof(count) == "number" then
+					for _ = 1, count do
+						ArmyService.AddUnitToArmy(owner_id, unit_type)
+					end
+				end
+			end
+		end
+	end
+end
+
+function ArmyService.HasArmy(owner_id)
+	return active_armies[owner_id] ~= nil
+end
+
+function ArmyService.GetArmy(owner_id)
+	return active_armies[owner_id]
+end
+
+function ArmyService.AddUnitToArmy(owner_id, unit_type)
+	local army = active_armies[owner_id]
+	if not army or not army.Leader or not army.Leader.Parent then
+		return
+	end
+
+	local stats = GameConfig.Units[unit_type] or GameConfig.Units.Skeleton
+
+	local unit = Instance.new("Part")
+	unit.Name = unit_type
+	unit.Size = Vector3.new(stats.Size, stats.Size, stats.Size)
+	unit.Color = stats.Color
+	unit.Material = Enum.Material.Plastic
+	unit.CanCollide = true
+	unit.Anchored = false
+	unit.Position = army.Leader.Position + Vector3.new(0, 8, 0)
+	unit.Parent = ArmyService._units_folder
+
+	unit:SetAttribute("OwnerId", owner_id)
+	unit:SetAttribute("Kind", "Unit")
+	unit:SetAttribute("Type", unit_type)
+	unit:SetAttribute("HP", stats.Health)
+	unit:SetAttribute("MaxHP", stats.Health)
+	unit:SetAttribute("Damage", stats.Damage)
+	unit:SetAttribute("DisplayName", unit_type)
+
+	local formation_index = army.NextFormationIndex or 1
+	army.NextFormationIndex = formation_index + 1
+	unit:SetAttribute("FormationIndex", formation_index)
+
+	local is_player_army = (typeof(owner_id) == "number")
+	if is_player_army then
+		assign_collision(unit, COLLISION_PLAYER_UNITS)
+	else
+		assign_collision(unit, COLLISION_NPC_UNITS)
+	end
+
+	VisualService.AttachHealthBar(unit)
+	UnitModelService.ApplyModel(unit, unit_type)
+
+	local attach0 = Instance.new("Attachment")
+	attach0.Parent = unit
+
+	local align_pos = Instance.new("AlignPosition")
+	align_pos.Mode = Enum.PositionAlignmentMode.OneAttachment
+	align_pos.Attachment0 = attach0
+	align_pos.MaxForce = 35000 * stats.Mass
+	align_pos.Responsiveness = 10
+	align_pos.MaxVelocity = 28
+	align_pos.Parent = unit
+
+	local align_rot = Instance.new("AlignOrientation")
+	align_rot.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align_rot.Attachment0 = attach0
+	align_rot.MaxTorque = 35000 * stats.Mass
+	align_rot.Responsiveness = 10
+	align_rot.Parent = unit
+
+	table.insert(army.Units, { Instance = unit, AlignPos = align_pos })
+end
+
+local function compute_formation_pos(leader_pos, formation_index)
+	local golden = GameConfig.Formation.GoldenAngle
+	local inner_cap = GameConfig.Formation.InnerCapacity
+
+	local i = formation_index
+	if typeof(i) ~= "number" or i < 1 then
+		i = 1
+	end
+
+	local is_inner = (i <= inner_cap)
+	local local_i = i
+	local spacing = GameConfig.Formation.OuterSpacing
+	local radius_boost = 0
+
+	if is_inner then
+		spacing = GameConfig.Formation.InnerSpacing
+	else
+		local_i = i - inner_cap
+		spacing = GameConfig.Formation.OuterSpacing
+		radius_boost = GameConfig.Formation.OuterRadiusBoost
+	end
+
+	local r = (spacing * math.sqrt(local_i)) + radius_boost
+	local theta = local_i * golden
+
+	return Vector3.new(
+		leader_pos.X + r * math.cos(theta),
+		leader_pos.Y,
+		leader_pos.Z + r * math.sin(theta)
+	)
+end
+
+function ArmyService.UpdateFormation(army)
+	local leader = army.Leader
+	if not leader or not leader.Parent then
+		return
+	end
+
+	local center = leader.Position
+	for _, unit_data in ipairs(army.Units) do
+		local unit = unit_data.Instance
+		if unit and unit.Parent then
+			local idx = unit:GetAttribute("FormationIndex") or 1
+			unit_data.AlignPos.Position = compute_formation_pos(center, idx)
+		end
+	end
+end
+
+function ArmyService.RemoveRareArmy(owner_id)
+	local army = active_armies[owner_id]
+	if not army then
+		return
+	end
+
+	if army.Leader and army.Leader.Parent then
+		army.Leader:Destroy()
+	end
+
+	ArmyService.ClearArmyUnits(owner_id)
+	active_armies[owner_id] = nil
+end
+
+function ArmyService.RemoveRoamUnit(unit_part)
+	if not unit_part then
+		return
+	end
+
+	for idx = #roam_units, 1, -1 do
+		if roam_units[idx].Part == unit_part then
+			table.remove(roam_units, idx)
+			break
+		end
+	end
+
+	unit_part:Destroy()
+end
+
+function ArmyService.CreateRoamingUnit(owner_id, unit_type, position, group_id, offset_vec)
+	local stats = GameConfig.Units[unit_type] or GameConfig.Units.Skeleton
+
+	local unit = Instance.new("Part")
+	unit.Name = unit_type
+	unit.Size = Vector3.new(stats.Size, stats.Size, stats.Size)
+	unit.Color = stats.Color
+	unit.Material = Enum.Material.Plastic
+	unit.CanCollide = true
+	unit.Anchored = false
+	unit.Position = position
+	unit.Parent = ArmyService._units_folder
+
+	unit:SetAttribute("OwnerId", owner_id)
+	unit:SetAttribute("Kind", "Unit")
+	unit:SetAttribute("Type", unit_type)
+	unit:SetAttribute("HP", stats.Health)
+	unit:SetAttribute("MaxHP", stats.Health)
+	unit:SetAttribute("Damage", stats.Damage)
+	unit:SetAttribute("GroupId", group_id)
+	unit:SetAttribute("DisplayName", unit_type)
+
+	assign_collision(unit, COLLISION_NPC_UNITS)
+
+	VisualService.AttachHealthBar(unit)
+	UnitModelService.ApplyModel(unit, unit_type)
+
+	local align_pos = build_mover(unit)
+
+	table.insert(roam_units, {
+		OwnerId = owner_id,
+		GroupId = group_id,
+		Offset = offset_vec or Vector3.new(0, 0, 0),
+		Part = unit,
+		AlignPos = align_pos,
+	})
+
+	return unit
+end
+
+function ArmyService.CreateRoamingLeader(owner_id, leader_part)
+	local align_pos = build_mover(leader_part)
+	table.insert(roam_leaders, { OwnerId = owner_id, Part = leader_part, AlignPos = align_pos })
+	return align_pos
+end
+
+function ArmyService.PruneRoamLists()
+	for i = #roam_units, 1, -1 do
+		local p = roam_units[i].Part
+		if not p or not p.Parent then
+			table.remove(roam_units, i)
+		end
+	end
+
+	for i = #roam_leaders, 1, -1 do
+		local p = roam_leaders[i].Part
+		if not p or not p.Parent then
+			table.remove(roam_leaders, i)
+		end
+	end
+end
+
+function ArmyService.GetRoamUnits()
+	return roam_units
+end
+
+function ArmyService.GetRoamLeaders()
+	return roam_leaders
+end
+
+function ArmyService.IsLeader(part)
+	return part and part:GetAttribute("Kind") == "Leader"
+end
+
+function ArmyService.GetAllCombatParts()
+	local list = {}
+
+	for _, army in pairs(active_armies) do
+		if army.Leader and army.Leader.Parent then
+			table.insert(list, army.Leader)
+		end
+		for _, unit_data in ipairs(army.Units) do
+			local unit = unit_data.Instance
+			if unit and unit.Parent then
+				table.insert(list, unit)
+			end
+		end
+	end
+
+	for _, data in ipairs(roam_units) do
+		local unit = data.Part
+		if unit and unit.Parent then
+			table.insert(list, unit)
+		end
+	end
+
+	return list
+end
+
+return ArmyService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="9">
+          <Properties>
+            <string name="Name">RegenService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezNFQUEzNzk1LTY3RkUtNEQ5RC1CMzE2LTM4QTY0NTA3QzJCQ30=]]></BinaryString>
+            <string name="Source"><![CDATA[local RegenService = {}
+
+local Players = game:GetService("Players")
+
+local GameConfig = require(script.Parent.GameConfig)
+local ArmyService = require(script.Parent.ArmyService)
+
+local function heal_part(part, amount)
+	local hp = part:GetAttribute("HP")
+	local max_hp = part:GetAttribute("MaxHP")
+	if typeof(hp) ~= "number" or typeof(max_hp) ~= "number" then
+		return
+	end
+	if hp <= 0 then
+		return
+	end
+
+	local new_hp = hp + amount
+	if new_hp > max_hp then
+		new_hp = max_hp
+	end
+
+	if new_hp ~= hp then
+		part:SetAttribute("HP", new_hp)
+	end
+end
+
+local function heal_player(player, amount)
+	local char = player.Character
+	if not char then
+		return
+	end
+
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+
+	if humanoid and humanoid.Health > 0 then
+		local new_health = humanoid.Health + amount
+		if new_health > humanoid.MaxHealth then
+			new_health = humanoid.MaxHealth
+		end
+
+		humanoid.Health = new_health
+
+		if hrp then
+			hrp:SetAttribute("MaxHP", humanoid.MaxHealth)
+			hrp:SetAttribute("HP", humanoid.Health)
+		end
+	end
+end
+
+function RegenService.Start()
+	task.spawn(function()
+		while true do
+			local parts = ArmyService.GetAllCombatParts()
+			for _, part in ipairs(parts) do
+				if part and part.Parent then
+					heal_part(part, GameConfig.Regen.UnitHealPerTick)
+				end
+			end
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				heal_player(player, GameConfig.Regen.PlayerHealPerTick)
+			end
+
+			task.wait(GameConfig.Regen.TickSeconds)
+		end
+	end)
+end
+
+return RegenService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="10">
+          <Properties>
+            <string name="Name">CombatService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezNGMUE5NTI2LUU5QjktNDg2QS04ODI4LTQ4QTQ1MTM3NzY1M30=]]></BinaryString>
+            <string name="Source"><![CDATA[local CombatService = {}
+
+local Players = game:GetService("Players")
+
+local GameConfig = require(script.Parent.GameConfig)
+local ArmyService = require(script.Parent.ArmyService)
+local AttackFxService = require(script.Parent.AttackFxService)
+
+local ATTACK_RANGE = GameConfig.Combat.AttackRange
+local ATTACK_COOLDOWN = GameConfig.Combat.AttackCooldown
+local COMBAT_LOCK_SECONDS = GameConfig.Combat.CombatLockSeconds
+
+local owner_last_combat_time = {}
+
+local function now()
+	return os.clock()
+end
+
+local function is_alive(part)
+	local hp = part:GetAttribute("HP")
+	return typeof(hp) == "number" and hp > 0
+end
+
+local function apply_hit_flash(target)
+	local old_color = target.Color
+	target.Color = Color3.new(1, 1, 1)
+	task.delay(0.08, function()
+		if target.Parent then
+			target.Color = old_color
+		end
+	end)
+end
+
+local function mark_in_combat(owner_a, owner_b)
+	local t = now()
+	if owner_a ~= nil then
+		owner_last_combat_time[owner_a] = t
+	end
+	if owner_b ~= nil then
+		owner_last_combat_time[owner_b] = t
+	end
+end
+
+function CombatService.IsOwnerInCombat(owner_id)
+	local t = owner_last_combat_time[owner_id]
+	if not t then
+		return false
+	end
+	return (now() - t) <= COMBAT_LOCK_SECONDS
+end
+
+local function get_player_from_leader(target_leader)
+	local owner_id = target_leader:GetAttribute("OwnerId")
+	if typeof(owner_id) ~= "number" then
+		return nil
+	end
+	return Players:GetPlayerByUserId(owner_id)
+end
+
+local function should_raise()
+	return math.random() < GameConfig.RaiseChanceBase
+end
+
+local function try_raise_unit(killer_owner, unit_type, guaranteed)
+	if killer_owner == nil then
+		return
+	end
+	if not ArmyService.HasArmy(killer_owner) then
+		return
+	end
+
+	if guaranteed then
+		ArmyService.AddUnitToArmy(killer_owner, unit_type)
+		return
+	end
+
+	if should_raise() then
+		ArmyService.AddUnitToArmy(killer_owner, unit_type)
+	end
+end
+
+local function resolve_player_death(victim_leader)
+	local player = get_player_from_leader(victim_leader)
+	if player and player.Character then
+		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.Health = 0
+		else
+			player.Character:BreakJoints()
+		end
+	end
+end
+
+local function grant_loot_from_rare_leader(killer_owner, rare_leader_part)
+	if typeof(killer_owner) ~= "number" then
+		return
+	end
+
+	local boss_raise = rare_leader_part:GetAttribute("BossRaiseType")
+	if typeof(boss_raise) == "string" and boss_raise ~= "" then
+		-- 100% guaranteed leader raise reward
+		try_raise_unit(killer_owner, boss_raise, true)
+	end
+
+	local attrs = rare_leader_part:GetAttributes()
+	for key, value in pairs(attrs) do
+		if typeof(key) == "string" and string.sub(key, 1, 5) == "Loot_" then
+			local unit_type = string.sub(key, 6)
+			if typeof(value) == "number" and value > 0 then
+				for _ = 1, value do
+					try_raise_unit(killer_owner, unit_type, false)
+				end
+			end
+		end
+	end
+end
+
+local function resolve_rare_leader_death(killer_part, victim_leader)
+	local killer_owner = killer_part and killer_part:GetAttribute("OwnerId") or nil
+	local rare_owner = victim_leader:GetAttribute("OwnerId")
+
+	grant_loot_from_rare_leader(killer_owner, victim_leader)
+	ArmyService.RemoveRareArmy(rare_owner)
+end
+
+local function resolve_unit_death(killer_part, victim_unit)
+	local victim_type = victim_unit:GetAttribute("Type") or "Skeleton"
+	local killer_owner = killer_part and killer_part:GetAttribute("OwnerId") or nil
+
+	if victim_unit:GetAttribute("GroupId") then
+		ArmyService.RemoveRoamUnit(victim_unit)
+	else
+		victim_unit:Destroy()
+	end
+
+	try_raise_unit(killer_owner, victim_type, false)
+end
+
+local function resolve_death(killer_part, victim_part)
+	if ArmyService.IsLeader(victim_part) then
+		local leader_kind = victim_part:GetAttribute("LeaderKind")
+		if leader_kind == "Player" then
+			resolve_player_death(victim_part)
+		else
+			resolve_rare_leader_death(killer_part, victim_part)
+		end
+		return
+	end
+
+	resolve_unit_death(killer_part, victim_part)
+end
+
+local function apply_damage_to_player(target_leader, dmg)
+	local player = get_player_from_leader(target_leader)
+	if not player then
+		return
+	end
+
+	local char = player.Character
+	if not char then
+		return
+	end
+
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	if humanoid.Health <= 0 then
+		return
+	end
+
+	humanoid:TakeDamage(dmg)
+
+	target_leader:SetAttribute("MaxHP", humanoid.MaxHealth)
+	target_leader:SetAttribute("HP", humanoid.Health)
+end
+
+function CombatService.Start()
+	print("CombatService: Starting combat loop...")
+	task.spawn(function()
+		while true do
+			CombatService.GameLoop()
+			task.wait(ATTACK_COOLDOWN)
+		end
+	end)
+end
+
+function CombatService.GameLoop()
+	local parts = ArmyService.GetAllCombatParts()
+	local count = #parts
+	if count <= 1 then
+		return
+	end
+
+	for i = 1, count do
+		local attacker = parts[i]
+		if attacker and attacker.Parent and is_alive(attacker) then
+			local owner_a = attacker:GetAttribute("OwnerId")
+			local best_target = nil
+			local min_dst = ATTACK_RANGE
+
+			for j = 1, count do
+				if j ~= i then
+					local victim = parts[j]
+					if victim and victim.Parent and is_alive(victim) then
+						local owner_b = victim:GetAttribute("OwnerId")
+						if owner_b and owner_b ~= owner_a then
+							local dst = (attacker.Position - victim.Position).Magnitude
+							if dst < min_dst then
+								min_dst = dst
+								best_target = victim
+							end
+						end
+					end
+				end
+			end
+
+			if best_target then
+				CombatService.Attack(attacker, best_target)
+			end
+		end
+	end
+end
+
+function CombatService.Attack(attacker, target)
+	local dmg = attacker:GetAttribute("Damage")
+	if typeof(dmg) ~= "number" then
+		dmg = 5
+	end
+
+	local owner_a = attacker:GetAttribute("OwnerId")
+	local owner_b = target:GetAttribute("OwnerId")
+	mark_in_combat(owner_a, owner_b)
+
+	AttackFxService.Play(attacker)
+
+	if ArmyService.IsLeader(target) and target:GetAttribute("LeaderKind") == "Player" then
+		apply_damage_to_player(target, dmg)
+		apply_hit_flash(target)
+
+		local hp = target:GetAttribute("HP")
+		if typeof(hp) == "number" and hp <= 0 then
+			resolve_death(attacker, target)
+		end
+		return
+	end
+
+	local current_hp = target:GetAttribute("HP")
+	local max_hp = target:GetAttribute("MaxHP")
+	if typeof(current_hp) ~= "number" or typeof(max_hp) ~= "number" then
+		return
+	end
+
+	local new_hp = current_hp - dmg
+	target:SetAttribute("HP", new_hp)
+
+	apply_hit_flash(target)
+
+	if new_hp <= 0 then
+		resolve_death(attacker, target)
+	end
+end
+
+return CombatService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="11">
+          <Properties>
+            <string name="Name">NPCService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezJFMjFGM0UyLUM1OEItNDNCNC05MTY1LUQ5NjZBMUM1M0ZFQn0=]]></BinaryString>
+            <string name="Source"><![CDATA[local NPCService = {}
+
+local Players = game:GetService("Players")
+
+local GameConfig = require(script.Parent.GameConfig)
+local ArmyService = require(script.Parent.ArmyService)
+local CombatService = require(script.Parent.CombatService)
+
+local function rand_range(a, b)
+	return a + (b - a) * math.random()
+end
+
+local function clamp_to_arena(pos)
+	local c = GameConfig.Arena.Center
+	local h = GameConfig.Arena.HalfSize
+	local x = math.clamp(pos.X, c.X - h.X, c.X + h.X)
+	local z = math.clamp(pos.Z, c.Z - h.Z, c.Z + h.Z)
+	return Vector3.new(x, GameConfig.Arena.GroundY, z)
+end
+
+local function random_arena_position()
+	local c = GameConfig.Arena.Center
+	local h = GameConfig.Arena.HalfSize
+	local x = rand_range(c.X - h.X, c.X + h.X)
+	local z = rand_range(c.Z - h.Z, c.Z + h.Z)
+	return Vector3.new(x, GameConfig.Arena.GroundY, z)
+end
+
+local function jitter_position(pos, radius)
+	local x = pos.X + rand_range(-radius, radius)
+	local z = pos.Z + rand_range(-radius, radius)
+	return Vector3.new(x, pos.Y, z)
+end
+
+local function unit_power(part)
+	if not part or not part.Parent then
+		return 0
+	end
+	local hp = part:GetAttribute("HP")
+	local dmg = part:GetAttribute("Damage")
+	if typeof(hp) ~= "number" then
+		hp = 0
+	end
+	if typeof(dmg) ~= "number" then
+		dmg = 0
+	end
+	return hp + (dmg * 12)
+end
+
+local function get_player_entities()
+	local entities = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				table.insert(entities, {
+					OwnerId = player.UserId,
+					Position = hrp.Position,
+					Power = unit_power(hrp),
+				})
+			end
+		end
+	end
+	return entities
+end
+
+local function compute_group_center(group_id)
+	local sum = Vector3.new(0, 0, 0)
+	local count = 0
+
+	for _, data in ipairs(ArmyService.GetRoamUnits()) do
+		if data.GroupId == group_id then
+			local p = data.Part
+			if p and p.Parent then
+				sum += p.Position
+				count += 1
+			end
+		end
+	end
+
+	if count <= 0 then
+		return nil
+	end
+
+	local center = sum / count
+	return Vector3.new(center.X, GameConfig.Arena.GroundY, center.Z)
+end
+
+local function group_power(owner_id, group_id)
+	local total = 0
+	for _, data in ipairs(ArmyService.GetRoamUnits()) do
+		if data.OwnerId == owner_id and data.GroupId == group_id then
+			total += unit_power(data.Part)
+		end
+	end
+	return total
+end
+
+local function get_group_entities(group_owner_map)
+	local entities = {}
+	for group_id, owner_id in pairs(group_owner_map) do
+		local center = compute_group_center(group_id)
+		if center then
+			table.insert(entities, {
+				OwnerId = owner_id,
+				GroupId = group_id,
+				Position = center,
+				Power = group_power(owner_id, group_id),
+				Type = "Group",
+			})
+		end
+	end
+	return entities
+end
+
+local function get_rare_entities()
+	local entities = {}
+	for _, data in ipairs(ArmyService.GetRoamLeaders()) do
+		local leader = data.Part
+		if leader and leader.Parent then
+			table.insert(entities, {
+				OwnerId = data.OwnerId,
+				Position = leader.Position,
+				Power = unit_power(leader),
+				Type = "Rare",
+			})
+		end
+	end
+	return entities
+end
+
+local function find_nearest_enemy_entity(self_owner_id, self_pos, group_owner_map)
+	local best = nil
+	local best_dist = GameConfig.AI.SenseRange
+
+	for _, e in ipairs(get_player_entities()) do
+		if e.OwnerId ~= self_owner_id then
+			local d = (e.Position - self_pos).Magnitude
+			if d < best_dist then
+				best_dist = d
+				best = e
+			end
+		end
+	end
+
+	for _, e in ipairs(get_group_entities(group_owner_map)) do
+		if e.OwnerId ~= self_owner_id then
+			local d = (e.Position - self_pos).Magnitude
+			if d < best_dist then
+				best_dist = d
+				best = e
+			end
+		end
+	end
+
+	for _, e in ipairs(get_rare_entities()) do
+		if e.OwnerId ~= self_owner_id then
+			local d = (e.Position - self_pos).Magnitude
+			if d < best_dist then
+				best_dist = d
+				best = e
+			end
+		end
+	end
+
+	return best
+end
+
+local function pick_wander_target(current_pos)
+	local j = GameConfig.AI.WanderJitterStuds
+	local jitter = Vector3.new(rand_range(-j, j), 0, rand_range(-j, j))
+	return clamp_to_arena(Vector3.new(current_pos.X, GameConfig.Arena.GroundY, current_pos.Z) + jitter)
+end
+
+local function compute_chase_or_flee(self_pos, self_power, enemy_entity)
+	local to_enemy = enemy_entity.Position - self_pos
+	local dist = to_enemy.Magnitude
+	if dist <= 0.01 then
+		return pick_wander_target(self_pos)
+	end
+
+	local stronger = self_power >= (enemy_entity.Power * GameConfig.AI.Hysteresis)
+	if stronger then
+		if dist > GameConfig.AI.ChaseStopRange then
+			return clamp_to_arena(Vector3.new(enemy_entity.Position.X, self_pos.Y, enemy_entity.Position.Z))
+		end
+		return clamp_to_arena(self_pos)
+	end
+
+	local away_dir = (-to_enemy).Unit
+	local flee_pos = self_pos + (away_dir * GameConfig.AI.FleeDistance)
+	return clamp_to_arena(Vector3.new(flee_pos.X, self_pos.Y, flee_pos.Z))
+end
+
+local function new_common_owner_id(counter)
+	return "NPC_GRP_OWNER_" .. tostring(counter)
+end
+
+local function choose_random_composition()
+	local list = GameConfig.CommonNPC.GroupCompositions
+	return list[math.random(1, #list)]
+end
+
+local function count_alive_roam_units()
+	local alive = 0
+	for _, data in ipairs(ArmyService.GetRoamUnits()) do
+		local p = data.Part
+		if p and p.Parent then
+			alive += 1
+		end
+	end
+	return alive
+end
+
+local function choose_random_rare_definition()
+	local list = GameConfig.RareNPC.Named
+	return list[math.random(1, #list)]
+end
+
+local function count_alive_rare_leaders()
+	ArmyService.PruneRoamLists()
+	local alive = 0
+	for _, data in ipairs(ArmyService.GetRoamLeaders()) do
+		local p = data.Part
+		if p and p.Parent then
+			alive += 1
+		end
+	end
+	return alive
+end
+
+local function spawn_common_group(state)
+	if count_alive_roam_units() >= GameConfig.CommonNPC.MaxAliveUnits then
+		return
+	end
+
+	state.group_counter += 1
+	state.owner_counter += 1
+
+	local owner_id = new_common_owner_id(state.owner_counter)
+	local group_id = "G" .. tostring(state.group_counter)
+
+	local center_pos = random_arena_position()
+	local composition = choose_random_composition()
+
+	state.group_owner[group_id] = owner_id
+	state.group_target[group_id] = center_pos
+	state.group_next[group_id] = 0
+
+	local offset_radius = 7
+	for idx, unit_type in ipairs(composition) do
+		local angle = (idx / #composition) * math.pi * 2
+		local offset = Vector3.new(math.cos(angle) * offset_radius, 0, math.sin(angle) * offset_radius)
+		local spawn_pos = jitter_position(center_pos, GameConfig.CommonNPC.GroupSpawnRadius)
+		ArmyService.CreateRoamingUnit(owner_id, unit_type, spawn_pos, group_id, offset)
+	end
+end
+
+local function set_leader_loot_attributes(leader, army_def, boss_raise_type)
+	local totals = {}
+	for _, entry in ipairs(army_def) do
+		local unit_type = entry.Type
+		local count = entry.Count
+		if typeof(unit_type) == "string" and typeof(count) == "number" then
+			totals[unit_type] = (totals[unit_type] or 0) + count
+		end
+	end
+
+	for unit_type, count in pairs(totals) do
+		leader:SetAttribute("Loot_" .. unit_type, count)
+	end
+
+	if typeof(boss_raise_type) == "string" and boss_raise_type ~= "" then
+		leader:SetAttribute("BossRaiseType", boss_raise_type)
+	end
+end
+
+local function spawn_rare_named_npc(state, world_leaders_folder)
+	if count_alive_rare_leaders() >= GameConfig.RareNPC.MaxAlive then
+		return
+	end
+	if math.random() > GameConfig.RareNPC.SpawnChance then
+		return
+	end
+
+	local def = choose_random_rare_definition()
+	local owner_id = "NPC_RARE_" .. tostring(math.floor(os.clock() * 1000))
+
+	local leader = Instance.new("Part")
+	leader.Name = def.Name
+	leader.Size = Vector3.new(6, 6, 6)
+	leader.Color = def.LeaderColor
+	leader.Material = Enum.Material.Neon
+	leader.CanCollide = true
+	leader.Anchored = false
+	leader.Position = random_arena_position()
+	leader.Parent = world_leaders_folder
+
+	leader:SetAttribute("HP", def.LeaderHP)
+	leader:SetAttribute("MaxHP", def.LeaderHP)
+	leader:SetAttribute("Damage", def.LeaderDamage)
+	leader:SetAttribute("ModelKey", def.ModelKey)
+	leader:SetAttribute("IsNamedNPC", true)
+	leader:SetAttribute("DisplayName", def.Name)
+
+	set_leader_loot_attributes(leader, def.Army, def.BossRaiseType)
+
+	ArmyService.CreateArmy(owner_id, leader, "NPC_Rare", def.Army)
+	ArmyService.CreateRoamingLeader(owner_id, leader)
+
+	print("RARE NPC SPAWNED: " .. def.Name)
+end
+
+local function update_group_target(state, group_id, t)
+	local owner_id = state.group_owner[group_id]
+	if not owner_id then
+		return
+	end
+
+	if CombatService.IsOwnerInCombat(owner_id) then
+		return
+	end
+
+	local next_t = state.group_next[group_id]
+	if next_t and t < next_t then
+		return
+	end
+
+	state.group_next[group_id] = t + rand_range(
+		GameConfig.Roam.TargetUpdateMinSeconds,
+		GameConfig.Roam.TargetUpdateMaxSeconds
+	)
+
+	local center = compute_group_center(group_id) or state.group_target[group_id] or random_arena_position()
+	local self_power = group_power(owner_id, group_id)
+	local enemy = find_nearest_enemy_entity(owner_id, center, state.group_owner)
+
+	if enemy then
+		state.group_target[group_id] = compute_chase_or_flee(center, self_power, enemy)
+		return
+	end
+
+	state.group_target[group_id] = pick_wander_target(center)
+end
+
+local function update_groups(state)
+	local t = os.clock()
+
+	for group_id, _ in pairs(state.group_owner) do
+		local center = compute_group_center(group_id)
+		if not center then
+			state.group_owner[group_id] = nil
+			state.group_target[group_id] = nil
+			state.group_next[group_id] = nil
+		else
+			update_group_target(state, group_id, t)
+		end
+	end
+
+	for _, data in ipairs(ArmyService.GetRoamUnits()) do
+		local p = data.Part
+		if p and p.Parent then
+			if not CombatService.IsOwnerInCombat(data.OwnerId) then
+				local center_target = state.group_target[data.GroupId]
+				if center_target then
+					local desired = center_target + data.Offset
+					data.AlignPos.Position = clamp_to_arena(Vector3.new(desired.X, p.Position.Y, desired.Z))
+				end
+			end
+		end
+	end
+end
+
+local function update_rare_leaders(state)
+	ArmyService.PruneRoamLists()
+	for _, data in ipairs(ArmyService.GetRoamLeaders()) do
+		local leader = data.Part
+		if leader and leader.Parent then
+			if CombatService.IsOwnerInCombat(data.OwnerId) then
+				continue
+			end
+
+			local self_pos = leader.Position
+			local self_power = unit_power(leader)
+			local enemy = find_nearest_enemy_entity(data.OwnerId, self_pos, state.group_owner)
+
+			if enemy then
+				data.AlignPos.Position = compute_chase_or_flee(self_pos, self_power, enemy)
+			else
+				data.AlignPos.Position = pick_wander_target(self_pos)
+			end
+		end
+	end
+end
+
+function NPCService.Start(world_leaders_folder)
+	local state = {
+		group_counter = 0,
+		owner_counter = 0,
+		group_owner = {},
+		group_target = {},
+		group_next = {},
+	}
+
+	print("NPCService: Starting spawn + AI loops...")
+
+	task.spawn(function()
+		while true do
+			spawn_common_group(state)
+			task.wait(GameConfig.CommonNPC.SpawnIntervalSeconds)
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			spawn_rare_named_npc(state, world_leaders_folder)
+			task.wait(GameConfig.RareNPC.SpawnCheckSeconds)
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			update_groups(state)
+			update_rare_leaders(state)
+			task.wait(0.18)
+		end
+	end)
+end
+
+return NPCService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="12">
+          <Properties>
+            <string name="Name">WeaponService</string>
+            <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+            <bool name="DefinesCapabilities">false</bool>
+            <Content name="LinkedSource">
+              <null>
+              </null>
+            </Content>
+            <BinaryString name="ScriptGuid"><![CDATA[ezQ4OTc0MEY2LTIyNzYtNDk5Ny05NjAyLUUwMkNGMUFDNjdCNn0=]]></BinaryString>
+            <string name="Source"><![CDATA[local WeaponService = {}
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(script.Parent.GameConfig)
+
+local REMOTE_NAME = "NecroMVP_Swing"
+local last_swing_time = {}
+
+local function get_remote()
+	local existing = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
+	if existing and existing:IsA("RemoteEvent") then
+		return existing
+	end
+
+	local r = Instance.new("RemoteEvent")
+	r.Name = REMOTE_NAME
+	r.Parent = ReplicatedStorage
+	return r
+end
+
+local function can_swing(player)
+	local t = os.clock()
+	local last = last_swing_time[player.UserId]
+	if last and (t - last) < GameConfig.Weapon.SwingCooldown then
+		return false
+	end
+
+	last_swing_time[player.UserId] = t
+	return true
+end
+
+local function build_hitbox(hrp)
+	local hitbox = Instance.new("Part")
+	hitbox.Name = "WeaponHitbox"
+	hitbox.Size = GameConfig.Weapon.HitboxSize
+	hitbox.Transparency = 1
+	hitbox.CanCollide = false
+	hitbox.Anchored = true
+	hitbox.Parent = workspace
+
+	local forward = hrp.CFrame.LookVector
+	local pos = hrp.Position + (forward * GameConfig.Weapon.HitboxForwardStuds)
+	hitbox.CFrame = CFrame.new(pos, pos + forward)
+
+	return hitbox
+end
+
+local function resolve_target_core(part)
+	if part:GetAttribute("HP") ~= nil then
+		return part
+	end
+
+	local parent = part.Parent
+	if parent and parent:IsA("Model") then
+		local maybe_core = parent.Parent
+		if maybe_core and maybe_core:IsA("BasePart") and maybe_core:GetAttribute("HP") ~= nil then
+			return maybe_core
+		end
+	end
+
+	return nil
+end
+
+local function apply_damage_to_part(player, target_part)
+	if not target_part or not target_part.Parent then
+		return
+	end
+
+	local owner_a = player.UserId
+	local owner_b = target_part:GetAttribute("OwnerId")
+	if owner_b == nil or owner_b == owner_a then
+		return
+	end
+
+	local hp = target_part:GetAttribute("HP")
+	local max_hp = target_part:GetAttribute("MaxHP")
+	if typeof(hp) ~= "number" or typeof(max_hp) ~= "number" then
+		return
+	end
+	if hp <= 0 then
+		return
+	end
+
+	local new_hp = hp - GameConfig.Weapon.Damage
+	target_part:SetAttribute("HP", new_hp)
+	target_part:SetAttribute("LastHitBy", owner_a)
+
+	if new_hp <= 0 then
+		local char = player.Character
+		if not char then
+			return
+		end
+
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			return
+		end
+
+		local CombatService = require(script.Parent.CombatService)
+		CombatService.Attack(hrp, target_part)
+	end
+end
+
+local function collect_damage_targets(hitbox)
+	local seen = {}
+	local results = {}
+
+	for _, part in ipairs(workspace:GetPartsInPart(hitbox)) do
+		if part and part.Parent then
+			local core = resolve_target_core(part)
+			if core and not seen[core] then
+				seen[core] = true
+				table.insert(results, core)
+			end
+		end
+	end
+
+	return results
+end
+
+function WeaponService.GiveTool(player)
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return
+	end
+
+	if backpack:FindFirstChild("Bone Sword") then
+		return
+	end
+
+	local tool = Instance.new("Tool")
+	tool.Name = "Bone Sword"
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1, 4, 1)
+	handle.Color = Color3.fromRGB(235, 235, 235)
+	handle.Material = Enum.Material.SmoothPlastic
+	handle.CanCollide = false
+	handle.Parent = tool
+
+	tool.Parent = backpack
+end
+
+function WeaponService.Start()
+	local remote = get_remote()
+
+	remote.OnServerEvent:Connect(function(player)
+		if not player or not player.Parent then
+			return
+		end
+
+		if not can_swing(player) then
+			return
+		end
+
+		local char = player.Character
+		if not char then
+			return
+		end
+
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			return
+		end
+
+		local hitbox = build_hitbox(hrp)
+		local targets = collect_damage_targets(hitbox)
+
+		for _, target in ipairs(targets) do
+			apply_damage_to_part(player, target)
+		end
+
+		task.delay(0.10, function()
+			if hitbox and hitbox.Parent then
+				hitbox:Destroy()
+			end
+		end)
+	end)
+end
+
+return WeaponService
+]]></string>
+            <int64 name="SourceAssetId">-1</int64>
+            <BinaryString name="Tags"></BinaryString>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Script" referent="13">
+        <Properties>
+          <string name="Name">GameManager</string>
+          <BinaryString name="AttributesSerialize">AQAAAAgAAABOZWNyb01WUAMB</BinaryString>
+          <bool name="DefinesCapabilities">false</bool>
+          <bool name="Disabled">false</bool>
+          <Content name="LinkedSource">
+            <null>
+            </null>
+          </Content>
+          <token name="RunContext">0</token>
+          <BinaryString name="ScriptGuid"><![CDATA[ezREN0FCQkQxLTVBMDEtNEEzMy05OERCLUM1RkY5OEZGMDlGN30=]]></BinaryString>
+          <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
+
+local server_root = ServerScriptService:WaitForChild("NecromancerMVP_Server")
+local systems = server_root:WaitForChild("Systems")
+
+local GameConfig = require(systems.GameConfig)
+local ModelLibraryService = require(systems.ModelLibraryService)
+local ArmyService = require(systems.ArmyService)
+local CombatService = require(systems.CombatService)
+local NPCService = require(systems.NPCService)
+local RegenService = require(systems.RegenService)
+local WeaponService = require(systems.WeaponService)
+
+local world_root = Workspace:WaitForChild("NecromancerMVP_World")
+local world_units = world_root:WaitForChild("Units")
+local world_leaders = world_root:WaitForChild("Leaders")
+
+local function sync_player_hp_to_humanoid(character, hp)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	humanoid.MaxHealth = hp
+	humanoid.Health = hp
+end
+
+local function setup_player(player)
+	player.CharacterAdded:Connect(function(character)
+		local hrp = character:WaitForChild("HumanoidRootPart")
+
+		local hp = GameConfig.PlayerBaseHealth
+		local dmg = GameConfig.PlayerBaseDamage
+
+		hrp:SetAttribute("OwnerId", player.UserId)
+		hrp:SetAttribute("HP", hp)
+		hrp:SetAttribute("MaxHP", hp)
+		hrp:SetAttribute("Damage", dmg)
+		hrp:SetAttribute("LeaderKind", "Player")
+		hrp:SetAttribute("DisplayName", player.Name)
+
+		sync_player_hp_to_humanoid(character, hp)
+		ArmyService.BindPlayerCharacterCollision(character)
+
+		-- Respawn always resets to start army
+		ArmyService.CreateArmy(player.UserId, hrp, "Player", nil)
+		WeaponService.GiveTool(player)
+
+		print("Player ready:", player.Name)
+	end)
+end
+
+-- Sanitize ModelLibrary at boot (keeps anim containers; disables collisions)
+ModelLibraryService.SanitizeLibrary()
+
+ArmyService.Start(world_units, world_leaders)
+CombatService.Start()
+NPCService.Start(world_leaders)
+RegenService.Start()
+WeaponService.Start()
+
+Players.PlayerAdded:Connect(setup_player)
+for _, p in ipairs(Players:GetPlayers()) do
+	setup_player(p)
+end
+]]></string>
+          <int64 name="SourceAssetId">-1</int64>
+          <BinaryString name="Tags"></BinaryString>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+</roblox>
