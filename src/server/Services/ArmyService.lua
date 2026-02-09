@@ -335,4 +335,99 @@ function ArmyService.PowerOfWanderingGroup(group_id)
     return total
 end
 
+-- Returns a flat list of all unit models (leaders and units) across all armies
+-- and roaming groups. This is used by CombatService to find potential targets.
+function ArmyService:get_all_units()
+    local units = {}
+
+    -- Include leader parts and unit parts for each active army
+    for _, army in pairs(active_armies) do
+        if army.Leader and army.Leader.Parent then
+            table.insert(units, army.Leader)
+        end
+        for _, entry in ipairs(army.Units) do
+            if entry.Part and entry.Part.Parent then
+                table.insert(units, entry.Part)
+            end
+        end
+    end
+
+    -- Include unit parts from roaming groups
+    for _, group in pairs(roaming_groups) do
+        for _, entry in ipairs(group.Units) do
+            if entry.Part and entry.Part.Parent then
+                table.insert(units, entry.Part)
+            end
+        end
+    end
+
+    return units
+end
+
+-----------------------------------------------------------------------
+-- Spawn and count helpers used by SpawnService
+-----------------------------------------------------------------------
+
+-- Returns the number of active named NPC armies (ignores expired ones).
+function ArmyService:get_named_count()
+    local count = 0
+    for _, army in pairs(active_armies) do
+        if army.Kind == "Named" then
+            count += 1
+        end
+    end
+    return count
+end
+
+-- Returns the number of currently roaming wandering groups.
+function ArmyService:get_wander_count()
+    local count = 0
+    for _ in pairs(roaming_groups) do
+        count += 1
+    end
+    return count
+end
+
+-- Spawns a random named NPC army at a random position inside the arena.
+function ArmyService:spawn_named_army()
+    local defs = GameConfig.NamedNPCs
+    if not defs or #defs == 0 then
+        return nil
+    end
+    -- pick a random named definition
+    local def = defs[math.random(1, #defs)]
+
+    -- pick a random point within the arena half‑size
+    local half = GameConfig.Arena.HalfSize
+    local pos = Vector3.new(
+        math.random(-half.X, half.X),
+        0,
+        math.random(-half.Z, half.Z)
+    )
+
+    return ArmyService.CreateNamedArmy(def, pos)
+end
+
+-- Spawns a random wandering group (composition) at a random position in the arena.
+function ArmyService:spawn_wandering_group()
+    local comps = GameConfig.WanderingCompositions
+    if not comps or #comps == 0 then
+        return nil
+    end
+    -- choose a random unit composition (e.g. { "Skeleton", "Skeleton" })
+    local comp = comps[math.random(1, #comps)]
+
+    -- random spawn position
+    local half = GameConfig.Arena.HalfSize
+    local pos = Vector3.new(
+        math.random(-half.X, half.X),
+        0,
+        math.random(-half.Z, half.Z)
+    )
+
+    return ArmyService.CreateWanderingGroup(comp, pos)
+end
+
+
+
 return ArmyService
