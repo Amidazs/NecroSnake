@@ -13,7 +13,7 @@
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "_Root": { "$path": "src/ServerScriptService.rbxmx" },
-      "MoldelReplacementService": { l"$path": "src/ModelReplacementService.lua" }
+      "ModelReplacementService": { "$path": "src/ModelReplacementService.lua" }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
