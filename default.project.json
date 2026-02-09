@@ -2,17 +2,19 @@
   "name": "NecroSnake",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "_Root": { "$path": "src/ReplicatedStorage.rbxmx" }
+      "_Root": { "$path": "src/ReplicatedStorage.rbxmx" },
+      "ModelLibrary": {
+        "$className": "Folder",
+        "$path": "src/ModelLibrary"
+      }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
-      "_Root": { "$path": "src/ServerScriptService.rbxmx" }
+      "_Root": { "$path": "src/ServerScriptService.rbxmx" },
+      "MoldelReplacementService": { l"$path": "src/ModelReplacementService.lua" }
     },
-
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "_Root": { "$path": "src/StarterPlayer.rbxmx" }
