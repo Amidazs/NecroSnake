@@ -1,0 +1,12 @@
+﻿# Rojo / Roblox
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
+# OS / tooling
+.DS_Store
+Thumbs.db
+
+# Node / tooling (if you add later)
+node_modules/
