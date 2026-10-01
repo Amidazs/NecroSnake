@@ -224,7 +224,7 @@ Work:
 
 ## Phase 2 - Tactical army control and formations
 
-**Status:** IN PROGRESS - whole-army commands + cohort formation + Base Formation Editor + combat presets/spacing/watchdog + first real ranged content mechanically GREEN on 1 October 2026; hands-on readability review remains.
+**Status:** COMPLETE - mechanically GREEN and hands-on mixed-combat readability/feel accepted on 1 October 2026.
 
 **Goal:** make the player feel like an army commander rather than a pet owner.
 
@@ -280,15 +280,17 @@ Work:
 - Real shield-front / ranged-rear combat validation used three captured Skeleton Knights plus two captured Skeleton Archers. Frontline Knights fought at roughly 2.9-5.9 studs while the Archers held roughly 23.3-25.8 studs; the five-unit formation dealt 179 damage during the test window at 8 total Command Capacity.
 - The persistent Base Formation Editor already enumerates ModelLibrary templates dynamically, so Skeleton Archer automatically appears there with Ranged as its catalogue default and can receive a saved override like any other template.
 
-**Next Phase 2 slice:** hands-on mixed-combat readability/feel review with the real Skeleton Archer. If accepted, close Phase 2 and proceed with Phase 3 stress gates (25 -> 50 -> 100 -> 200 -> 300 owned units).
+**Phase 2 closeout:** hands-on mixed-combat readability/feel review with the real Skeleton Archer was accepted on 1 October 2026. Phase 2 is closed and development proceeds to Phase 3 stress gates (25 -> 50 -> 100 -> 200 -> 300 owned units).
 
 **Acceptance:**
-- Player can build a shield-front / ranged-rear formation.
-- Formation remains understandable while moving and fighting.
-- Commands work without selecting hundreds of individual units.
-- A player can intentionally screen archers with armoured melee units.
+- [x] Player can build a shield-front / ranged-rear formation.
+- [x] Formation remains understandable while moving and fighting.
+- [x] Commands work without selecting hundreds of individual units.
+- [x] A player can intentionally screen archers with armoured melee units.
 
 ## Phase 3 - Scale to several hundred undead
+
+**Status:** IN PROGRESS - baseline instrumentation and 25 -> 50 scaling foundation started on 1 October 2026.
 
 **Goal:** make the target army scale technically viable before adding lots of content.
 
