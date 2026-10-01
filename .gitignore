@@ -1,12 +1,18 @@
-﻿# Rojo / Roblox
+# Roblox generated outputs
 *.rbxl
 *.rbxlx
 *.rbxm
 *.rbxmx
+*.lock
+
+# Canonical place and source assets that must travel with the repo
+!place.rbxl
+!src/ServerStorage/*.rbxm
+!src/ServerStorage/**/*.rbxm
 
 # OS / tooling
 .DS_Store
 Thumbs.db
 
-# Node / tooling (if you add later)
+# Node / tooling
 node_modules/
