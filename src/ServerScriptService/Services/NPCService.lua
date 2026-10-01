@@ -1296,7 +1296,8 @@ local function prune_dead_and_expired()
 			if u.humanoid.Health > 0 and not expired and u.model.Parent ~= nil then
 				table.insert(alive_units, u)
 			else
-				if u.model.Parent ~= nil then
+				local is_necro_corpse = u.model:GetAttribute("IsNecroCorpse") == true
+				if u.model.Parent ~= nil and not is_necro_corpse then
 					u.model:Destroy()
 				end
 				target_state_by_unit[u.model] = nil

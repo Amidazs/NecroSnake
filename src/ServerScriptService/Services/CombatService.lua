@@ -26,6 +26,7 @@ local ATTR_CLAIM_USER_ID = "CorpseClaimUserId"
 local ATTR_CLAIM_EXPIRES = "CorpseClaimExpiresAt"
 local ATTR_RAISE_FAILURES = "RaiseFailures"
 local ATTR_MAX_RAISE_FAILURES = "MaxRaiseFailures"
+local CORPSES_FOLDER_NAME = "Corpses"
 
 local army_service = nil :: any
 local running = false
@@ -37,6 +38,21 @@ local container_connections: { [Instance]: RBXScriptConnection } = {}
 
 local function server_now(): number
 	return Workspace:GetServerTimeNow()
+end
+
+local function get_or_create_corpses_folder(): Folder
+	local existing = Workspace:FindFirstChild(CORPSES_FOLDER_NAME)
+	if existing and existing:IsA("Folder") then
+		return existing
+	end
+	if existing then
+		existing:Destroy()
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = CORPSES_FOLDER_NAME
+	folder.Parent = Workspace
+	return folder
 end
 
 local function get_root(model: Model): BasePart?
@@ -260,6 +276,17 @@ local function handle_raise(player: Player, model: Model)
 	if model:GetAttribute("CorpseCollapsed") == true then
 		return
 	end
+
+	local former_owner = model:GetAttribute("ArmyOwnerUserId")
+	if typeof(former_owner) == "number" and former_owner == player.UserId then
+		send_result(player, {
+			kind = "raise",
+			status = "OWN_CORPSE",
+			message = "You cannot Raise your own fallen undead.",
+		})
+		return
+	end
+
 	if not validate_raise_distance(player, model) then
 		send_result(player, {
 			kind = "raise",
@@ -426,6 +453,10 @@ local function initialize_corpse(model: Model)
 	model:SetAttribute(ATTR_RAISE_FAILURES, 0)
 	model:SetAttribute(ATTR_MAX_RAISE_FAILURES, MAX_FAILED_RAISES)
 
+	-- Corpses leave active combat containers immediately. This prevents NPC
+	-- group cleanup/AI from deleting or retargeting them during the Raise window.
+	model.Parent = get_or_create_corpses_folder()
+
 	create_corpse_soul(root)
 	update_corpse_visual(model, 0)
 	create_raise_prompt(model, root)
@@ -520,6 +551,7 @@ function CombatService.start()
 	end
 	running = true
 
+	get_or_create_corpses_folder()
 	result_remote = Remotes.necromancy_result()
 	banish_remote = Remotes.banish_request()
 	banish_remote.OnServerEvent:Connect(handle_banish)

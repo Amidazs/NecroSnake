@@ -19,6 +19,7 @@ PvP is the centre of the game. PvE factions, bosses, collection, cloning, events
 ### Camera and player role
 
 - Normal third-person Roblox camera.
+- Player jumping is disabled; traversal/combat must not allow terrain-jump cheese against melee enemies.
 - The necromancer is personally dangerous but vulnerable.
 - The army is the player's main source of battlefield power.
 - A necromancer caught alone should be at serious risk.
@@ -64,6 +65,8 @@ PvP is the centre of the game. PvE factions, bosses, collection, cloning, events
 - On the third failed attempt, the corpse/soul collapses and disappears immediately.
 - A failed attempt does not automatically prevent a later attempt if failures remain and the corpse timer has not expired.
 - Failure state should be readable visually: stable -> damaged/unstable -> critical -> soul collapse.
+- Once dead, a raisable corpse is protected from normal combat damage and active NPC/army cleanup until it is Raised, collapses, or expires.
+- A Necromancer may **never Raise their own fallen undead**, even after another player's Soul Claim window has expired.
 - Even high-level Necromancers should not reach guaranteed capture rates for the rarest elites/bosses.
 
 ### Full army behaviour
@@ -164,6 +167,9 @@ Work:
 - [x] Add clear "Army Full / Need X Capacity" feedback.
 - [x] Add Banish command for living owned units.
 - [x] Prevent Banish from deleting dead/raisable owned corpses.
+- [x] Protect raisable corpses from repeated combat hits and NPC/group cleanup by moving them into a dedicated corpse lifecycle container.
+- [x] Prevent owners from Raising their own fallen undead at any point in the corpse lifetime.
+- [x] Disable player jumping on both server and client to prevent terrain-jump combat cheese.
 - [x] Add Raise targeting/interaction UI using a hold-to-Raise ProximityPrompt.
 - [x] Add Command Capacity HUD readout.
 - [x] Add basic corpse failure readability (green -> amber -> red Highlight states).
@@ -207,6 +213,9 @@ Work:
 - Successful Raise now spawns the owned unit at the dead unit's corpse position; final test placed the new Weak Skeleton within about 1.7 studs of the post-death corpse pivot before normal army AI movement.
 - Technical army-growth test reached 20 live individually owned units at 20/25 Command; all 20 had friendly-identification outlines and naturally spread about 7-20 studs around the Necromancer.
 - Visual capture review found the first cyan outline treatment too debug-like; it was replaced by a softer occluded necromantic-green outline with reduced fill/opacity for better readability at 20 units.
+- Corpse-protection regression test used a real NPC-group unit: after death it moved to `Workspace.Corpses`, survived multiple NPC cleanup cycles, survived another Bone Sword swing, remained at 0 HP, and retained 0 Raise failures.
+- Own-fallen-unit test confirmed the owner receives `You cannot Raise your own fallen undead.` immediately and again after the 6-second Soul Claim expires; the corpse remains available to other eligible Necromancers and the owner's failed-attempt count stays unchanged.
+- No-jump test confirmed client and server both report Jumping disabled, AutoJump off, JumpPower/JumpHeight at 0; forced client jump/state-change attempts produced effectively zero upward movement and the Humanoid remained in Running state.
 
 **Next Phase 1 slice:** hands-on player feel review of combat/Raise feedback and 5 -> 20 army growth; address any feel issues before declaring Phase 1 complete and moving to tactical formations/commands.
 

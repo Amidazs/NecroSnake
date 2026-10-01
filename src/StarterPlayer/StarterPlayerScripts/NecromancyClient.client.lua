@@ -99,7 +99,7 @@ local function show_message(message: string, status: string?)
 		feedback.TextColor3 = Color3.fromRGB(125, 255, 165)
 	elseif status == "FAILED" or status == "DESTROYED" then
 		feedback.TextColor3 = Color3.fromRGB(255, 145, 125)
-	elseif status == "FULL" or status == "CLAIMED" then
+	elseif status == "FULL" or status == "CLAIMED" or status == "OWN_CORPSE" then
 		feedback.TextColor3 = Color3.fromRGB(255, 215, 105)
 	else
 		feedback.TextColor3 = Color3.fromRGB(235, 235, 235)

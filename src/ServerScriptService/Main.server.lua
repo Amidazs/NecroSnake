@@ -46,6 +46,10 @@ local PlayerCombatService = require(
 	ServicesFolder:WaitForChild("PlayerCombatService")
 )
 
+local PlayerMovementService = require(
+	ServicesFolder:WaitForChild("PlayerMovementService")
+)
+
 local function ensure_remote_event_root(name: string): RemoteEvent
 	local existing = ReplicatedStorage:FindFirstChild(name)
 	if existing and existing:IsA("RemoteEvent") then
@@ -117,6 +121,7 @@ local function main()
 
 	TeleportService.init(ArmyService, BackpackService)
 	TeleportService.start()
+	PlayerMovementService.start()
 	PlayerCombatService.start()
 end
 
