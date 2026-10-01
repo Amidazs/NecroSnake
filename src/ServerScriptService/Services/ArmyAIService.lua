@@ -44,6 +44,8 @@ local TARGET_LEASH_RANGE = 45
 local ATTACK_RANGE = 6
 
 local AI_TICK_SECONDS = 0.35
+local TARGET_ACQUISITION_BUCKETS = 3
+local METRIC_REPORT_SECONDS = 2
 
 -- Formation:
 local RING_SPACING = 7
@@ -194,9 +196,18 @@ type ArmyCommandState = {
 	facing: Vector3?,
 }
 
+type AiMetricState = {
+	total_ms: number,
+	samples: number,
+	max_ms: number,
+}
+
 local state_by_unit: { [Model]: UnitState } = {}
 local command_by_user_id: { [number]: ArmyCommandState } = {}
+local metrics_by_user_id: { [number]: AiMetricState } = {}
 local command_remote: RemoteEvent? = nil
+local ai_cycle = 0
+local next_metric_publish = 0
 
 local function now_seconds(): number
 	-- Server-safe monotonic-ish timer for cooldown checks.
@@ -1656,6 +1667,55 @@ local function tick_commanded_mode(
 	return false
 end
 
+local function should_refresh_target(unit_model: Model): boolean
+	local unit_id = unit_model:GetAttribute("ArmyUnitId")
+	if typeof(unit_id) ~= "number" then
+		return true
+	end
+
+	local bucket = math.floor(unit_id) % TARGET_ACQUISITION_BUCKETS
+	return bucket == (ai_cycle % TARGET_ACQUISITION_BUCKETS)
+end
+
+local function record_tick_metric(player: Player, elapsed_seconds: number)
+	local state = metrics_by_user_id[player.UserId]
+	if not state then
+		state = { total_ms = 0, samples = 0, max_ms = 0 }
+		metrics_by_user_id[player.UserId] = state
+	end
+
+	local elapsed_ms = elapsed_seconds * 1000
+	state.total_ms += elapsed_ms
+	state.samples += 1
+	state.max_ms = math.max(state.max_ms, elapsed_ms)
+end
+
+local function publish_metrics_if_due()
+	local current_time = now()
+	if current_time < next_metric_publish then
+		return
+	end
+	next_metric_publish = current_time + METRIC_REPORT_SECONDS
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local metric = metrics_by_user_id[player.UserId]
+		if metric and metric.samples > 0 then
+			player:SetAttribute(
+				"ArmyAITickAverageMs",
+				metric.total_ms / metric.samples
+			)
+			player:SetAttribute("ArmyAITickMaxMs", metric.max_ms)
+		end
+
+		local unit_count = 0
+		if army_service and army_service.get_army_units then
+			unit_count = #army_service.get_army_units(player)
+		end
+		player:SetAttribute("ArmyAIUnitCount", unit_count)
+		metrics_by_user_id[player.UserId] = nil
+	end
+end
+
 local function tick_player(player: Player)
 	if not army_service or not army_service.get_army_units then
 		return
@@ -1764,20 +1824,23 @@ local function tick_player(player: Player)
 		end
 
 
-		-- Acquire target.
+		-- Spread expensive target searches across several AI cycles.
 		if not s.target then
-			local best = find_closest_engageable(
-				unit_model,
-				u_root.Position,
-				player_pos,
-				candidates
-			)
-			if best then
-				s.target = best
-				s.next_retarget_time = now() + RETARGET_COOLDOWN_SECONDS
+			if should_refresh_target(unit_model) then
+				local best = find_closest_engageable(
+					unit_model,
+					u_root.Position,
+					player_pos,
+					candidates
+				)
+				if best then
+					s.target = best
+					s.next_retarget_time = now() + RETARGET_COOLDOWN_SECONDS
+				end
 			end
 		else
-			-- Validate target.
+			-- Validate every cycle, but only search for a better target in
+			-- this unit's acquisition bucket.
 			if not is_alive(s.target)
 				or not should_unit_engage_target(
 					unit_model,
@@ -1786,7 +1849,7 @@ local function tick_player(player: Player)
 				)
 			then
 				s.target = nil
-			else
+			elseif should_refresh_target(unit_model) then
 				maybe_retarget_to_closer(
 					unit_model,
 					u_root.Position,
@@ -1877,11 +1940,15 @@ function ArmyAIService.start()
 	ai_task = task.spawn(function()
 		while running do
 			clear_dead_unit_state()
+			ai_cycle += 1
 
 			for _, player in ipairs(Players:GetPlayers()) do
+				local started_at = now()
 				tick_player(player)
+				record_tick_metric(player, now() - started_at)
 			end
 
+			publish_metrics_if_due()
 			task.wait(AI_TICK_SECONDS)
 		end
 	end)
