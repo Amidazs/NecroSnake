@@ -2,7 +2,6 @@
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local Debris = game:GetService("Debris")
 
 local PLAYER_BOUNDS_MARGIN = 12
 local PLAYER_RAYCAST_START_HEIGHT = 600
@@ -22,8 +21,6 @@ local did_init = false
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
 local DEFAULT_STARTER_TEMPLATE = "Skeleton"
 local DEFAULT_STARTER_COUNT = 3
-
-local CORPSE_CLEANUP_SECONDS = 5
 
 -- Attributes written by ModelLibraryService on spawned models.
 local ATTR_TEMPLATE_NAME = "TemplateName"
@@ -47,13 +44,6 @@ local TRAIT_WEIGHTS: { [string]: number } = {
 	None = 0.78,
 	Tough = 0.12,
 	Frenzied = 0.10,
-}
-
--- Templates that always raise (keyed by normalized template key).
--- Normalization: lowercase + remove spaces/underscores.
-local ALWAYS_RAISE_TEMPLATE_KEYS: { [string]: boolean } = {
-	cryptwarden = true,
-	gravebaron = true,
 }
 
 -- Spawn spread (helps prevent stacking)
@@ -240,6 +230,9 @@ local function remove_unit_from_army(player: Player, unit_model: Model)
 		end
 	end
 	armies_by_user_id[player.UserId] = new_list
+	if ArmyService.refresh_command_capacity then
+		ArmyService.refresh_command_capacity(player)
+	end
 end
 
 local function hook_unit_death_cleanup(
@@ -250,9 +243,6 @@ local function hook_unit_death_cleanup(
 	humanoid.Died:Connect(function()
 		remove_unit_from_army(player, unit_model)
 
-		if unit_model.Parent ~= nil then
-			Debris:AddItem(unit_model, CORPSE_CLEANUP_SECONDS)
-		end
 	end)
 end
 
@@ -403,6 +393,7 @@ local function spawn_one_unit(
 
 	armies_by_user_id[player.UserId] = armies_by_user_id[player.UserId] or {}
 	table.insert(armies_by_user_id[player.UserId], unit)
+	ArmyService.refresh_command_capacity(player)
 
 	hook_unit_death_cleanup(player, model, humanoid)
 
@@ -422,12 +413,6 @@ local function summon_starter_units(player: Player)
 		DEFAULT_STARTER_COUNT,
 		overrides
 	)
-end
-
-local function normalize_template_key(name: string): string
-	local lower = string.lower(name)
-	local stripped = string.gsub(lower, "[%s_]+", "")
-	return stripped
 end
 
 local function compute_rarity_scaled_raise_chance(
@@ -457,11 +442,113 @@ local function read_string_attr(model: Model, attr_name: string): string?
 	return nil
 end
 
+local DEFAULT_COMMAND_CAPACITY = 5
+local MAX_RAISE_CHANCE_FROM_PROGRESSION = 0.95
+
+local function get_unit_command_cost(template_name: string, size_tier: string?): number
+	local stats = nil
+	if model_library_service and model_library_service.get_unit_stats then
+		stats = model_library_service.get_unit_stats(template_name)
+	end
+
+	local cost = 1
+	if stats and type(stats.CommandCost) == "number" then
+		cost = math.max(1, math.floor(stats.CommandCost))
+	end
+
+	if size_tier == "Giant" then
+		cost = math.max(cost + 1, math.ceil(cost * 1.5))
+	end
+
+	return cost
+end
+
+local function get_model_command_cost(model: Model): number
+	local attr = model:GetAttribute("CommandCost")
+	if typeof(attr) == "number" then
+		return math.max(1, math.floor(attr))
+	end
+
+	local template_name = read_string_attr(model, ATTR_TEMPLATE_NAME) or model.Name
+	local size_tier = read_string_attr(model, ATTR_SIZE_TIER)
+	return get_unit_command_cost(template_name, size_tier)
+end
+
+local function initialize_player_progression(player: Player)
+	if typeof(player:GetAttribute("NecromancerLevel")) ~= "number" then
+		player:SetAttribute("NecromancerLevel", 1)
+	end
+	if typeof(player:GetAttribute("CommandCapacity")) ~= "number" then
+		player:SetAttribute("CommandCapacity", DEFAULT_COMMAND_CAPACITY)
+	end
+	if typeof(player:GetAttribute("RaiseChanceBonus")) ~= "number" then
+		player:SetAttribute("RaiseChanceBonus", 0)
+	end
+	if typeof(player:GetAttribute("UsedCommandCapacity")) ~= "number" then
+		player:SetAttribute("UsedCommandCapacity", 0)
+	end
+end
+
+function ArmyService.get_command_capacity(player: Player): number
+	local value = player:GetAttribute("CommandCapacity")
+	if typeof(value) == "number" then
+		return math.max(0, math.floor(value))
+	end
+	return DEFAULT_COMMAND_CAPACITY
+end
+
+function ArmyService.get_used_command_capacity(player: Player): number
+	local total = 0
+	for _, unit in ipairs(armies_by_user_id[player.UserId] or {}) do
+		if unit.model and unit.model.Parent ~= nil then
+			total += get_model_command_cost(unit.model)
+		end
+	end
+	return total
+end
+
+function ArmyService.get_model_command_cost(model: Model): number
+	return get_model_command_cost(model)
+end
+
+function ArmyService.refresh_command_capacity(player: Player)
+	player:SetAttribute(
+		"UsedCommandCapacity",
+		ArmyService.get_used_command_capacity(player)
+	)
+end
+
+function ArmyService.can_add_model(player: Player, model: Model): (boolean, number, number, number)
+	local cost = get_model_command_cost(model)
+	local used = ArmyService.get_used_command_capacity(player)
+	local maximum = ArmyService.get_command_capacity(player)
+	return used + cost <= maximum, cost, used, maximum
+end
+
+function ArmyService.banish_unit(player: Player, model: Model): (boolean, string)
+	if model:GetAttribute("ArmyOwnerUserId") ~= player.UserId then
+		return false, "That unit is not part of your army."
+	end
+	if model.Parent == nil then
+		return false, "That unit no longer exists."
+	end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 or model:GetAttribute("IsNecroCorpse") == true then
+		return false, "Dead units cannot be Banished."
+	end
+
+	remove_unit_from_army(player, model)
+	model:SetAttribute("WasBanished", true)
+	model:Destroy()
+	return true, "Unit banished. Command Capacity freed."
+end
+
 function ArmyService.init(model_library)
 	model_library_service = model_library
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)
+		initialize_player_progression(player)
 		player.CharacterAdded:Connect(function(character)
 			ensure_player_death_hooks(player, character)
 
@@ -477,6 +564,10 @@ function ArmyService.init(model_library)
 			end)
 		end)
 	end)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		initialize_player_progression(player)
+	end
 end
 
 function ArmyService.get_army_units(player: Player): { Model }
@@ -503,6 +594,7 @@ function ArmyService.clear_army(player: Player)
 	end
 
 	armies_by_user_id[player.UserId] = {}
+	ArmyService.refresh_command_capacity(player)
 
 	for _, child in ipairs(folder:GetChildren()) do
 		if child:IsA("Model") then
@@ -539,6 +631,13 @@ function ArmyService.summon_units(
 
 	local start_index = (spawn_index_by_user_id[player.UserId] or 0) + 1
 	for i = 0, count - 1 do
+		local size_tier = overrides and overrides.force_size_tier or nil
+		local estimated_cost = get_unit_command_cost(template_name, size_tier)
+		local used = ArmyService.get_used_command_capacity(player)
+		if used + estimated_cost > ArmyService.get_command_capacity(player) then
+			break
+		end
+
 		local model = spawn_one_unit(
 			player,
 			template_name,
@@ -617,95 +716,84 @@ function ArmyService.spawn_from_snapshot(
 	return spawned
 end
 
-function ArmyService.try_raise_dead(player: Player, dead_model: Model): boolean
-	print(
-		"[RAISE CALL]",
-		"DeadModel=",
-		dead_model.Name,
-		"TemplateKeyAttr=",
-		dead_model:GetAttribute("TemplateKey"),
-		"TemplateNameAttr=",
-		dead_model:GetAttribute("TemplateName")
-	)
+function ArmyService.get_raise_chance(player: Player, dead_model: Model): number
+	local template_name = read_string_attr(dead_model, ATTR_TEMPLATE_NAME)
+		or DEFAULT_STARTER_TEMPLATE
+	local size_name = read_string_attr(dead_model, ATTR_SIZE_TIER) or "Normal"
+	local trait_name = read_string_attr(dead_model, ATTR_TRAIT) or "None"
 
-	if not model_library_service then
-		return false
-	end
-
-	local template_attr = dead_model:GetAttribute(ATTR_TEMPLATE_NAME)
-	local size_attr = dead_model:GetAttribute(ATTR_SIZE_TIER)
-	local trait_attr = dead_model:GetAttribute(ATTR_TRAIT)
-
-	local template_name = DEFAULT_STARTER_TEMPLATE
-	if typeof(template_attr) == "string" and template_attr ~= "" then
-		template_name = template_attr
-	end
-
-	-- Named/boss templates always raise.
-	local template_key = normalize_template_key(template_name)
-	local stats_key = template_name
-
-	local unit_stats = nil
-	if model_library_service.get_unit_stats then
-		unit_stats = model_library_service.get_unit_stats(stats_key)
-	end
-
-	print(
-		"[RAISE CHECK]",
-		"stats_key=",
-		stats_key,
-		"unit_stats_exists=",
-		unit_stats ~= nil,
-		"AlwaysRaise=",
-		unit_stats and unit_stats.AlwaysRaise,
-		"RaiseChance=",
-		unit_stats and unit_stats.RaiseChance
-	)
-
-	if unit_stats and unit_stats.AlwaysRaise == true then
-		-- Always raise: skip chance roll.
-	else
-		-- 2) Named/boss templates always raise (your existing rule).
-		if not ALWAYS_RAISE_TEMPLATE_KEYS[template_key] then
-			local raise_chance: number
-
-			-- 3) If unit defines RaiseChance, use it. Otherwise fallback to rarity logic.
-			if unit_stats and type(unit_stats.RaiseChance) == "number" then
-				raise_chance = clamp01(unit_stats.RaiseChance)
-			else
-				local size_name = (typeof(size_attr) == "string") and size_attr
-					or "Normal"
-				local trait_name = (typeof(trait_attr) == "string") and trait_attr
-					or "None"
-
-				raise_chance = compute_rarity_scaled_raise_chance(size_name, trait_name)
-			end
-
-			local roll = Random.new():NextNumber(0, 1)
-			print("[RAISE ROLL]", "roll=", roll, "raise_chance=", raise_chance)
-
-			if roll > raise_chance then
-				return false
-			end
+	local base_chance = compute_rarity_scaled_raise_chance(size_name, trait_name)
+	if model_library_service and model_library_service.get_unit_stats then
+		local stats = model_library_service.get_unit_stats(template_name)
+		if stats and type(stats.RaiseChance) == "number" then
+			base_chance = clamp01(stats.RaiseChance)
 		end
 	end
 
+	local bonus = player:GetAttribute("RaiseChanceBonus")
+	if typeof(bonus) ~= "number" then
+		bonus = 0
+	end
+
+	return clamp(
+		base_chance + bonus,
+		MIN_RAISE_CHANCE,
+		MAX_RAISE_CHANCE_FROM_PROGRESSION
+	)
+end
+
+function ArmyService.try_raise_dead(
+	player: Player,
+	dead_model: Model
+): (boolean, string, number, number)
+	if not model_library_service or dead_model.Parent == nil then
+		return false, "INVALID", 0, 0
+	end
+
+	local humanoid = dead_model:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health > 0 then
+		return false, "INVALID", 0, 0
+	end
+
+	local can_add, cost, used, maximum = ArmyService.can_add_model(player, dead_model)
+	local chance = ArmyService.get_raise_chance(player, dead_model)
+	if not can_add then
+		return false, "FULL", chance, cost
+	end
+
+	local roll = Random.new():NextNumber()
+	if roll > chance then
+		print("[RAISE FAILED]", dead_model.Name, roll, chance)
+		return false, "FAILED", chance, cost
+	end
+
+	local template_name = read_string_attr(dead_model, ATTR_TEMPLATE_NAME)
+		or DEFAULT_STARTER_TEMPLATE
+	local size_attr = read_string_attr(dead_model, ATTR_SIZE_TIER)
+	local trait_attr = read_string_attr(dead_model, ATTR_TRAIT)
+
 	local overrides: SpawnOverrides? = nil
-	if typeof(size_attr) == "string" and typeof(trait_attr) == "string" then
+	if size_attr or trait_attr then
 		overrides = {
 			force_size_tier = size_attr,
 			force_trait = trait_attr,
 		}
 	end
 
-	if dead_model.Parent ~= nil then
-		dead_model:Destroy()
+	dead_model:Destroy()
+	local spawned = ArmyService.summon_units(player, template_name, 1, overrides)
+	if #spawned == 0 then
+		warn(
+			"[ArmyService] Raise passed roll but spawn failed:",
+			template_name,
+			used,
+			maximum
+		)
+		return false, "SPAWN_FAILED", chance, cost
 	end
 
-	-- Raise 1 unit that matches the corpse's template + size + trait.
-	ArmyService.summon_units(player, template_name, 1, overrides)
-	print("[RAISE SUCCESS]", template_name)
-	return true
+	print("[RAISE SUCCESS]", template_name, "chance=", chance)
+	return true, "SUCCESS", chance, cost
 end
 
 return ArmyService

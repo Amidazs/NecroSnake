@@ -148,34 +148,58 @@ Completed on 1 October 2026.
 
 ## Phase 1 - Core combat and active necromancy
 
+**Status:** IN PROGRESS - active necromancy foundation GREEN on 1 October 2026.
+
 **Goal:** make killing one enemy and raising it feel good enough to support the entire game.
 
 Work:
-- Replace automatic corpse raising with active raising.
-- Add corpse state and 20-second lifetime.
-- Add killer-only 6-second Soul Claim window.
-- Add 3-failure corpse attempt state.
-- Add raise chance calculation based on unit difficulty + Necromancer proficiency.
-- Add capacity check before Raise begins.
-- Add clear "Army Full / Need X Capacity" feedback.
-- Add Banish command.
-- Add Raise targeting/interaction UI.
-- Add Raise channel animation.
-- Add Raise success/failure VFX and audio.
-- Add corpse decay/failure visuals.
-- Improve player attack animation and weapon feel.
-- Add enemy hit reaction and death presentation.
-- Improve own-army visual identification.
+- [x] Replace automatic corpse raising with active raising.
+- [x] Add corpse state and 20-second lifetime.
+- [x] Add killer-only 6-second Soul Claim window.
+- [x] Add 3-failure corpse attempt state.
+- [x] Add raise chance calculation based on unit difficulty + Necromancer progression hook.
+- [x] Remove prototype "always raise" behaviour from bosses.
+- [x] Add weighted Command Capacity costs to current unit types/variants.
+- [x] Add capacity check before Raise begins.
+- [x] Add clear "Army Full / Need X Capacity" feedback.
+- [x] Add Banish command for living owned units.
+- [x] Prevent Banish from deleting dead/raisable owned corpses.
+- [x] Add Raise targeting/interaction UI using a hold-to-Raise ProximityPrompt.
+- [x] Add Command Capacity HUD readout.
+- [x] Add basic corpse failure readability (green -> amber -> red Highlight states).
+- [ ] Add dedicated Raise channel animation.
+- [ ] Add Raise success/failure VFX and audio.
+- [ ] Improve corpse decay/disintegration presentation beyond the current Highlight placeholder.
+- [ ] Improve player attack animation and weapon feel.
+- [ ] Add enemy hit reaction and death presentation.
+- [ ] Improve own-army visual identification.
+- [ ] Run the subjective 5 -> 20 army-growth fun/readability test after the presentation pass.
 
-**Acceptance:**
-- Player can deliberately kill, target and attempt to raise a corpse.
-- Raise can succeed or fail.
-- Three failed attempts destroy the corpse.
-- Full army blocks Raise without consuming an attempt.
-- Banish frees capacity and allows a previously blocked Raise.
-- Killer exclusivity and post-6-second free-for-all work correctly.
-- Corpse disappears at expiry.
-- Growing from roughly 5 -> 20 units is already satisfying without relying on meta progression.
+**Acceptance / playtest status:**
+- [x] Player can deliberately kill, target and attempt to raise a corpse.
+- [x] Raise can succeed or fail.
+- [x] Three failed attempts destroy the corpse.
+- [x] Full army blocks Raise without consuming an attempt.
+- [x] Banish frees Command Capacity.
+- [x] A newly freed capacity slot allows a previously impossible unit type to be Raised.
+- [x] Killer exclusivity blocks another player identity during the first 6 seconds without consuming an attempt.
+- [x] After the 6-second claim window expires, the corpse becomes eligible to other Necromancers.
+- [x] Corpse disappears after approximately 20 seconds if left unraised.
+- [x] Dead owned units cannot be Banished to deny corpse theft.
+- [x] Clean restart: Level 1 starts at 5 Command, 3 starter Skeletons use 3/5, Raise bonus starts at 0.
+- [x] Clean restart produced no runtime errors after the Phase 1 final marker.
+- [ ] Growing from roughly 5 -> 20 units is already satisfying without relying on meta progression.
+
+**1 October 2026 test evidence:**
+- Dark Knight at 3/5 Command correctly refused Raise because it required 3 additional Command; failures remained 0.
+- Banish removed one living Skeleton without leaving a corpse and reduced usage from 3/5 to 2/5.
+- Fresh Dark Knight then Raised successfully and filled capacity to 5/5.
+- 5% Grave Baron test failed three consecutive Raise attempts and collapsed on the third.
+- Simulated foreign Soul Claim blocked Raise with failures remaining 0; the same corpse became raisable after claim expiry.
+- Untouched corpse expired and disappeared after the 20-second lifetime.
+- Dead starter Skeleton rejected Banish and remained a valid corpse.
+
+**Next Phase 1 slice:** Raise animation/VFX/audio, better death/corpse presentation, attack feel, then a 5 -> 20 army-growth playtest.
 
 ## Phase 2 - Tactical army control and formations
 
@@ -425,18 +449,16 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 1: Core combat and active necromancy.**
+**Continue Phase 1: presentation and combat feel.**
 
-The first implementation slice should be:
-1. Introduce persistent corpse objects/states.
-2. Stop automatic raising.
-3. Add active Raise interaction.
-4. Add per-unit Raise chance and Necromancer proficiency hook.
-5. Add 3-failure limit.
-6. Add 6-second killer claim + 20-second corpse expiry.
-7. Add Command Capacity validation.
-8. Add Army Full feedback.
-9. Add Banish.
-10. Playtest the full kill -> corpse -> raise/fail -> join-army loop before adding further content.
+The active Raise rules are implemented and playtested. The next slice is:
+1. Add a dedicated Necromancer Raise/channel animation.
+2. Add visible soul/VFX movement from corpse to Necromancer/army on success.
+3. Add clear failure and third-failure soul-collapse VFX.
+4. Improve corpse decay/disintegration presentation.
+5. Improve Bone Sword attack animation and hit feel.
+6. Add enemy hit reactions and better death presentation.
+7. Review own-army readability in a growing crowd.
+8. Run a 5 -> 20 army-growth playtest and fix anything that makes growth feel unclear or unsatisfying.
 
-No major new faction, boss, progression, Base or world-content work should begin until this Phase 1 loop is fun and reliable.
+No major new faction, boss, permanent-progression, Base or world-content work should begin until this Phase 1 loop is fun and reliable.

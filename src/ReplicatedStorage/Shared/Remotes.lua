@@ -53,5 +53,14 @@ function Remotes.backpack_set_loadout(): RemoteEvent
 	return Remotes.get_or_create_event("BackpackSetLoadout")
 end
 
+-- Active necromancy / army management
+function Remotes.necromancy_result(): RemoteEvent
+	return Remotes.get_or_create_event("NecromancyResult")
+end
+
+function Remotes.banish_request(): RemoteEvent
+	return Remotes.get_or_create_event("BanishRequest")
+end
+
 
 return Remotes

@@ -92,6 +92,9 @@ local function main()
 	Remotes.backpack_request()
 	Remotes.backpack_set_loadout()
 
+	-- Remotes used by active necromancy / Banish
+	Remotes.necromancy_result()
+	Remotes.banish_request()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")

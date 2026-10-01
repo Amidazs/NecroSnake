@@ -6,7 +6,7 @@
 -- - Ensures an Animations folder exists with Idle/Walk animations
 -- - Starts a server-side NPC animation controller (Idle/Walk)
 -- - Provides collision-group helpers (Units vs Leaders)
--- - Cleans up corpses after death
+-- - Leaves corpse lifecycle/raising to CombatService
 -- - Applies per-unit stats (HP/Damage/Cooldown/WalkSpeed)
 -- - Applies size tier + trait modifiers with weighted rarity rolls
 -- - Names NPCs based on rarity rolls (e.g. "Giant Tough Skeleton")
@@ -25,8 +25,6 @@ local NPC_FOLDER_NAME = "NPCs"
 
 local COLLISION_GROUP_UNITS = "Units"
 local COLLISION_GROUP_LEADERS = "Leaders"
-
-local CORPSE_LIFETIME_SECONDS = 10
 
 -- Attributes written to spawned NPC models so other systems (raising, UI, etc.)
 -- can reliably identify what the model is, even if Model.Name is a display name.
@@ -47,6 +45,7 @@ type StatDef = {
 	AttackCooldown: number,
 	WalkSpeed: number,
 	Weight: number,
+	CommandCost: number,
 	BaseScale: number?,
 
 	IsBoss: boolean?,
@@ -71,9 +70,11 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 0.9,
 		WalkSpeed = 12,
 		Weight = 6, -- VERY common
+		CommandCost = 1,
 		BaseScale = 1.3,
 		IsBoss = false,
-		AlwaysRaise = true,
+		AlwaysRaise = false,
+		RaiseChance = 0.90,
 	},
 
 	-- ========================
@@ -85,6 +86,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 0.9,
 		WalkSpeed = 12,
 		Weight = 3, -- common
+		CommandCost = 1,
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.85, -- 0..1
@@ -99,6 +101,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 0.9,
 		WalkSpeed = 10,
 		Weight = 1,
+		CommandCost = 2,
 		BaseScale = 1.5,
 		IsBoss = false,
 		AlwaysRaise = false,
@@ -114,6 +117,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 1.1,
 		WalkSpeed = 10,
 		Weight = 1,
+		CommandCost = 2,
 		BaseScale = 1.5,
 		IsBoss = false,
 		AlwaysRaise = false,
@@ -129,6 +133,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 1.0,
 		WalkSpeed = 13,
 		Weight = 0.25, -- rare
+		CommandCost = 3,
 		BaseScale = 1.7,
 		IsBoss = false,
 		AlwaysRaise = false,
@@ -144,9 +149,11 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 1.2,
 		WalkSpeed = 10,
 		Weight = 0.03, -- basically never random
+		CommandCost = 10,
 		BaseScale = 3,
 		IsBoss = true,
-		AlwaysRaise = true,
+		AlwaysRaise = false,
+		RaiseChance = 0.25,
 
 	},
 
@@ -156,9 +163,11 @@ local UNIT_STATS: { [string]: StatDef } = {
 		AttackCooldown = 1.2,
 		WalkSpeed = 10,
 		Weight = 0.03, -- basically never random
+		CommandCost = 10,
 		BaseScale = 3,
 		IsBoss = true,
-		AlwaysRaise = true,
+		AlwaysRaise = false,
+		RaiseChance = 0.25,
 
 	},
 }
@@ -302,21 +311,6 @@ local function ensure_parts_unanchored(model: Model)
 			inst.Anchored = false
 		end
 	end
-end
-
-local function attach_corpse_cleanup(model: Model)
-	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		return
-	end
-
-	humanoid.Died:Connect(function()
-		task.delay(CORPSE_LIFETIME_SECONDS, function()
-			if model and model.Parent then
-				model:Destroy()
-			end
-		end)
-	end)
 end
 
 local function ensure_collision_groups_exist()
@@ -499,6 +493,7 @@ local function apply_stats_size_traits(
 			AttackCooldown = 1.0,
 			WalkSpeed = 12,
 			Weight = 1,
+			CommandCost = 1,
 		}
 	end
 
@@ -529,6 +524,11 @@ local function apply_stats_size_traits(
 	model:SetAttribute("AttackCooldown", clamp(def.AttackCooldown, 0.2, 6.0))
 	model:SetAttribute("Defense", clamp(trait_mult.defense, 0, 0.9))
 	model:SetAttribute("SizeScale", scale)
+	local command_cost = def.CommandCost
+	if size_name == "Giant" then
+		command_cost = math.max(command_cost + 1, math.ceil(command_cost * 1.5))
+	end
+	model:SetAttribute("CommandCost", command_cost)
 
 	set_model_scale_to(model, scale)
 
@@ -679,7 +679,6 @@ function ModelLibraryService.spawn_from_template(
 
 	ensure_parts_unanchored(clone)
 	ensure_default_animations(clone)
-	attach_corpse_cleanup(clone)
 
 	-- Apply stats + size + traits first so SizeScale exists.
 	apply_stats_size_traits(clone, canonical_name, mods)
