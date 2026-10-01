@@ -194,10 +194,11 @@ Work:
 - Dark Knight at 3/5 Command correctly refused Raise because it required 3 additional Command; failures remained 0.
 - Banish removed one living Skeleton without leaving a corpse and reduced usage from 3/5 to 2/5.
 - Fresh Dark Knight then Raised successfully and filled capacity to 5/5.
-- 5% Grave Baron test failed three consecutive Raise attempts and collapsed on the third.
+- 5% Grave Baron test failed three consecutive Raise attempts and collapsed on the third; the Raise prompt locked immediately so no fourth/race-window attempt was possible.
 - Simulated foreign Soul Claim blocked Raise with failures remaining 0; the same corpse became raisable after claim expiry.
 - Untouched corpse expired and disappeared after the 20-second lifetime.
 - Dead starter Skeleton rejected Banish and remained a valid corpse.
+- End-to-end Bone Sword test confirmed: player attack killed a controlled Weak Skeleton, the corpse remained without auto-raising, the active Raise prompt appeared, and a successful Raise added the unit to the army and updated Command Capacity.
 
 **Next Phase 1 slice:** Raise animation/VFX/audio, better death/corpse presentation, attack feel, then a 5 -> 20 army-growth playtest.
 

@@ -148,6 +148,9 @@ local function handle_raise(player: Player, model: Model)
 	if model.Parent == nil or model:GetAttribute(ATTR_CORPSE) ~= true then
 		return
 	end
+	if model:GetAttribute("CorpseCollapsed") == true then
+		return
+	end
 	if not validate_raise_distance(player, model) then
 		send_result(player, {
 			kind = "raise",
@@ -216,6 +219,11 @@ local function handle_raise(player: Player, model: Model)
 
 		local remaining_attempts = MAX_FAILED_RAISES - failures
 		if remaining_attempts <= 0 then
+			model:SetAttribute("CorpseCollapsed", true)
+			local prompt = model:FindFirstChild("NecroRaisePrompt", true)
+			if prompt and prompt:IsA("ProximityPrompt") then
+				prompt.Enabled = false
+			end
 			send_result(player, {
 				kind = "raise",
 				status = "DESTROYED",
