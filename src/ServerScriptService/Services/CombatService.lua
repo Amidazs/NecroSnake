@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Remotes = require(
@@ -67,6 +68,39 @@ local function send_result(player: Player, payload: { [string]: any })
 	end
 end
 
+local function create_corpse_soul(root: BasePart)
+	local old = root:FindFirstChild("NecroSoulAttachment")
+	if old then
+		old:Destroy()
+	end
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "NecroSoulAttachment"
+	attachment.Position = Vector3.new(0, 2.8, 0)
+	attachment.Parent = root
+
+	local particles = Instance.new("ParticleEmitter")
+	particles.Name = "NecroSoulParticles"
+	particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	particles.Color = ColorSequence.new(
+		Color3.fromRGB(110, 255, 175),
+		Color3.fromRGB(45, 145, 100)
+	)
+	particles.LightEmission = 0.75
+	particles.Lifetime = NumberRange.new(0.6, 1.2)
+	particles.Rate = 8
+	particles.Speed = NumberRange.new(0.25, 0.75)
+	particles.SpreadAngle = Vector2.new(180, 180)
+	particles.Parent = attachment
+
+	local light = Instance.new("PointLight")
+	light.Name = "NecroSoulLight"
+	light.Color = Color3.fromRGB(95, 235, 150)
+	light.Brightness = 1.1
+	light.Range = 7
+	light.Parent = attachment
+end
+
 local function update_corpse_visual(model: Model, failures: number)
 	local highlight = model:FindFirstChild("NecroCorpseHighlight")
 	if not highlight or not highlight:IsA("Highlight") then
@@ -88,18 +122,93 @@ local function update_corpse_visual(model: Model, failures: number)
 		highlight.FillColor = Color3.fromRGB(190, 55, 55)
 		highlight.OutlineColor = Color3.fromRGB(255, 120, 120)
 	end
+
+	local particles = model:FindFirstChild("NecroSoulParticles", true)
+	local light = model:FindFirstChild("NecroSoulLight", true)
+	if failures <= 0 then
+		if particles and particles:IsA("ParticleEmitter") then
+			particles.Color = ColorSequence.new(
+				Color3.fromRGB(110, 255, 175),
+				Color3.fromRGB(45, 145, 100)
+			)
+		end
+		if light and light:IsA("PointLight") then
+			light.Color = Color3.fromRGB(95, 235, 150)
+		end
+	elseif failures == 1 then
+		if particles and particles:IsA("ParticleEmitter") then
+			particles.Color = ColorSequence.new(
+				Color3.fromRGB(255, 215, 105),
+				Color3.fromRGB(170, 110, 35)
+			)
+		end
+		if light and light:IsA("PointLight") then
+			light.Color = Color3.fromRGB(255, 195, 75)
+		end
+	else
+		if particles and particles:IsA("ParticleEmitter") then
+			particles.Color = ColorSequence.new(
+				Color3.fromRGB(255, 115, 125),
+				Color3.fromRGB(135, 35, 65)
+			)
+		end
+		if light and light:IsA("PointLight") then
+			light.Color = Color3.fromRGB(235, 70, 95)
+		end
+	end
 end
 
 local function destroy_corpse(model: Model, reason: string)
-	if model.Parent == nil then
+	if model.Parent == nil or model:GetAttribute("CorpseEnding") == true then
 		return
 	end
+
+	model:SetAttribute("CorpseEnding", true)
 	model:SetAttribute("CorpseEndReason", reason)
+
 	local prompt = model:FindFirstChild("NecroRaisePrompt", true)
 	if prompt and prompt:IsA("ProximityPrompt") then
 		prompt.Enabled = false
 	end
-	model:Destroy()
+
+	local particles = model:FindFirstChild("NecroSoulParticles", true)
+	if particles and particles:IsA("ParticleEmitter") then
+		particles.Rate = 0
+		particles:Emit(reason == "THREE_FAILED_RAISES" and 28 or 16)
+	end
+
+	local light = model:FindFirstChild("NecroSoulLight", true)
+	if light and light:IsA("PointLight") then
+		TweenService:Create(
+			light,
+			TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Brightness = 0, Range = 2 }
+		):Play()
+	end
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			TweenService:Create(
+				descendant,
+				TweenInfo.new(0.48, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+				{ Transparency = 1 }
+			):Play()
+		elseif descendant:IsA("Decal") or descendant:IsA("Texture") then
+			TweenService:Create(
+				descendant,
+				TweenInfo.new(0.48, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+				{ Transparency = 1 }
+			):Play()
+		end
+	end
+
+	task.delay(0.55, function()
+		if model.Parent ~= nil then
+			model:Destroy()
+		end
+	end)
 end
 
 local function get_failures(model: Model): number
@@ -177,6 +286,9 @@ local function handle_raise(player: Player, model: Model)
 	end
 
 	processing[model] = true
+	local corpse_root = get_root(model)
+	local corpse_position = corpse_root and corpse_root.Position or model:GetPivot().Position
+
 	local success, status, chance, command_cost =
 		army_service.try_raise_dead(player, model)
 
@@ -204,6 +316,7 @@ local function handle_raise(player: Player, model: Model)
 			status = "SUCCESS",
 			chance = chance,
 			commandCost = command_cost,
+			worldPosition = corpse_position,
 			message = ("Raise succeeded! (%d%% chance)"):format(
 				math.floor(chance * 100 + 0.5)
 			),
@@ -228,12 +341,11 @@ local function handle_raise(player: Player, model: Model)
 				kind = "raise",
 				status = "DESTROYED",
 				chance = chance,
+				worldPosition = corpse_position,
 				message = "The third Raise failed. The soul collapsed.",
 			})
 			processing[model] = nil
-			task.delay(0.35, function()
-				destroy_corpse(model, "THREE_FAILED_RAISES")
-			end)
+			destroy_corpse(model, "THREE_FAILED_RAISES")
 			return
 		end
 
@@ -241,6 +353,7 @@ local function handle_raise(player: Player, model: Model)
 			kind = "raise",
 			status = "FAILED",
 			chance = chance,
+			worldPosition = corpse_position,
 			failures = failures,
 			attemptsRemaining = remaining_attempts,
 			message = (
@@ -313,6 +426,7 @@ local function initialize_corpse(model: Model)
 	model:SetAttribute(ATTR_RAISE_FAILURES, 0)
 	model:SetAttribute(ATTR_MAX_RAISE_FAILURES, MAX_FAILED_RAISES)
 
+	create_corpse_soul(root)
 	update_corpse_visual(model, 0)
 	create_raise_prompt(model, root)
 

@@ -603,6 +603,35 @@ function ArmyService.clear_army(player: Player)
 	end
 end
 
+function ArmyService.summon_unit_at(
+	player: Player,
+	template_name: string,
+	cframe: CFrame,
+	overrides: SpawnOverrides?
+): Model?
+	assert(did_init, "ArmyService not initialized")
+	assert(model_library_service, "ArmyService missing ModelLibraryService")
+
+	local size_tier = overrides and overrides.force_size_tier or nil
+	local estimated_cost = get_unit_command_cost(template_name, size_tier)
+	local used = ArmyService.get_used_command_capacity(player)
+	if used + estimated_cost > ArmyService.get_command_capacity(player) then
+		return nil
+	end
+
+	local folder = get_or_create_player_army_folder(player)
+	return spawn_one_unit(
+		player,
+		template_name,
+		folder,
+		cframe,
+		0,
+		0,
+		0,
+		overrides
+	)
+end
+
 function ArmyService.summon_units(
 	player: Player,
 	template_name: string,
@@ -780,9 +809,14 @@ function ArmyService.try_raise_dead(
 		}
 	end
 
-	dead_model:Destroy()
-	local spawned = ArmyService.summon_units(player, template_name, 1, overrides)
-	if #spawned == 0 then
+	local corpse_cframe = dead_model:GetPivot()
+	local spawned = ArmyService.summon_unit_at(
+		player,
+		template_name,
+		corpse_cframe,
+		overrides
+	)
+	if not spawned then
 		warn(
 			"[ArmyService] Raise passed roll but spawn failed:",
 			template_name,
@@ -790,6 +824,10 @@ function ArmyService.try_raise_dead(
 			maximum
 		)
 		return false, "SPAWN_FAILED", chance, cost
+	end
+
+	if dead_model.Parent ~= nil then
+		dead_model:Destroy()
 	end
 
 	print("[RAISE SUCCESS]", template_name, "chance=", chance)

@@ -518,6 +518,7 @@ local function apply_stats_size_traits(
 		humanoid.MaxHealth = math.max(1, math.floor(hp + 0.5))
 		humanoid.Health = humanoid.MaxHealth
 		humanoid.WalkSpeed = clamp(spd, 6, 24)
+		humanoid.BreakJointsOnDeath = false
 	end
 
 	model:SetAttribute("Damage", math.max(1, math.floor(dmg + 0.5)))

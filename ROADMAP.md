@@ -148,7 +148,7 @@ Completed on 1 October 2026.
 
 ## Phase 1 - Core combat and active necromancy
 
-**Status:** IN PROGRESS - active necromancy foundation GREEN on 1 October 2026.
+**Status:** IN PROGRESS - active necromancy mechanics + presentation foundation GREEN on 1 October 2026; hands-on fun/feel review still pending.
 
 **Goal:** make killing one enemy and raising it feel good enough to support the entire game.
 
@@ -167,13 +167,13 @@ Work:
 - [x] Add Raise targeting/interaction UI using a hold-to-Raise ProximityPrompt.
 - [x] Add Command Capacity HUD readout.
 - [x] Add basic corpse failure readability (green -> amber -> red Highlight states).
-- [ ] Add dedicated Raise channel animation.
-- [ ] Add Raise success/failure VFX and audio.
-- [ ] Improve corpse decay/disintegration presentation beyond the current Highlight placeholder.
-- [ ] Improve player attack animation and weapon feel.
-- [ ] Add enemy hit reaction and death presentation.
-- [ ] Improve own-army visual identification.
-- [ ] Run the subjective 5 -> 20 army-growth fun/readability test after the presentation pass.
+- [x] Add dedicated Raise channel animation.
+- [x] Add Raise success/failure VFX and audio.
+- [x] Improve corpse decay/disintegration presentation beyond the current Highlight placeholder.
+- [x] Improve player attack animation and weapon feel.
+- [x] Add enemy hit reaction and death presentation.
+- [x] Improve own-army visual identification.
+- [x] Run the technical 5 -> 20 army-growth/readability test after the presentation pass; subjective fun/feel remains for hands-on player review.
 
 **Acceptance / playtest status:**
 - [x] Player can deliberately kill, target and attempt to raise a corpse.
@@ -199,8 +199,16 @@ Work:
 - Untouched corpse expired and disappeared after the 20-second lifetime.
 - Dead starter Skeleton rejected Banish and remained a valid corpse.
 - End-to-end Bone Sword test confirmed: player attack killed a controlled Weak Skeleton, the corpse remained without auto-raising, the active Raise prompt appeared, and a successful Raise added the unit to the army and updated Command Capacity.
+- Bone Sword presentation test confirmed the avatar's ToolSlash animation runs at Action priority, the sword Trail is active during the swing, and confirmed hits drive a crosshair hit marker plus target flash.
+- Confirmed-hit test reduced a controlled target from 100 -> 82 HP while the client showed the validated hit flash.
+- Raise-channel presentation test confirmed the avatar's Cheer animation runs at Action priority during the hold and a growing necromantic soul focus appears above the corpse.
+- Corpses now emit persistent soul particles/light while raisable; failure state recolours the soul effect as well as the corpse Highlight.
+- Real 20-second expiry test confirmed the corpse enters a fade/disintegration state (about 70% transparent, particles stopped) before being removed instead of popping out instantly.
+- Successful Raise now spawns the owned unit at the dead unit's corpse position; final test placed the new Weak Skeleton within about 1.7 studs of the post-death corpse pivot before normal army AI movement.
+- Technical army-growth test reached 20 live individually owned units at 20/25 Command; all 20 had friendly-identification outlines and naturally spread about 7-20 studs around the Necromancer.
+- Visual capture review found the first cyan outline treatment too debug-like; it was replaced by a softer occluded necromantic-green outline with reduced fill/opacity for better readability at 20 units.
 
-**Next Phase 1 slice:** Raise animation/VFX/audio, better death/corpse presentation, attack feel, then a 5 -> 20 army-growth playtest.
+**Next Phase 1 slice:** hands-on player feel review of combat/Raise feedback and 5 -> 20 army growth; address any feel issues before declaring Phase 1 complete and moving to tactical formations/commands.
 
 ## Phase 2 - Tactical army control and formations
 

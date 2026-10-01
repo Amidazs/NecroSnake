@@ -4,17 +4,22 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local Remotes = require(
+	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+)
+
 local PlayerCombatService = {}
 
 local REMOTE_NAME = "NecroMVP_Swing"
 local TOOL_NAME = "Bone Sword"
-local SWING_COOLDOWN = 0.35
+local SWING_COOLDOWN = 0.42
 local HITBOX_SIZE = Vector3.new(6, 5, 7)
 local HITBOX_FORWARD_STUDS = 5
 local DAMAGE = 18
 
 local last_swing_by_user_id: { [number]: number } = {}
 local did_start = false
+local combat_feedback_remote: RemoteEvent? = nil
 
 local function get_remote(): RemoteEvent
 	local existing = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
@@ -107,6 +112,19 @@ local function compute_damage(target: Model): number
 	return math.max(1, math.floor((DAMAGE * (1 - defense)) + 0.5))
 end
 
+local function apply_hit_reaction(attacker_root: BasePart, target: Model)
+	local target_root = target:FindFirstChild("HumanoidRootPart")
+	if not (target_root and target_root:IsA("BasePart")) then
+		return
+	end
+	if target_root.Anchored then
+		return
+	end
+
+	local direction = attacker_root.CFrame.LookVector
+	target_root.AssemblyLinearVelocity += (direction * 5) + Vector3.new(0, 1.5, 0)
+end
+
 local function can_swing(player: Player): boolean
 	local now = os.clock()
 	local last = last_swing_by_user_id[player.UserId]
@@ -148,6 +166,12 @@ local function handle_swing(player: Player)
 	local hitbox_cframe = root.CFrame * CFrame.new(0, 0, -HITBOX_FORWARD_STUDS)
 	local parts = Workspace:GetPartBoundsInBox(hitbox_cframe, HITBOX_SIZE, overlap)
 	local seen: { [Model]: boolean } = {}
+	local hit_count = 0
+	local killed_any = false
+	local feedback_position: Vector3? = nil
+	local feedback_damage = 0
+	local hit_targets: { Model } = {}
+
 	for _, part in ipairs(parts) do
 		local target = find_humanoid_model(part)
 		if target and not seen[target] and can_damage(player, target) then
@@ -155,11 +179,35 @@ local function handle_swing(player: Player)
 
 			local target_humanoid = target:FindFirstChildOfClass("Humanoid")
 			if target_humanoid then
+				local damage = compute_damage(target)
+				local health_before = target_humanoid.Health
+
 				target:SetAttribute("LastHitOwnerUserId", player.UserId)
 				target:SetAttribute("LastHitTime", os.clock())
-				target_humanoid:TakeDamage(compute_damage(target))
+				target_humanoid:TakeDamage(damage)
+				apply_hit_reaction(root, target)
+
+				hit_count += 1
+				table.insert(hit_targets, target)
+				feedback_damage = math.max(feedback_damage, damage)
+				killed_any = killed_any or (health_before > 0 and target_humanoid.Health <= 0)
+
+				local target_root = target:FindFirstChild("HumanoidRootPart")
+				if target_root and target_root:IsA("BasePart") then
+					feedback_position = target_root.Position
+				end
 			end
 		end
+	end
+
+	if hit_count > 0 and combat_feedback_remote then
+		combat_feedback_remote:FireClient(player, {
+			hitCount = hit_count,
+			damage = feedback_damage,
+			killed = killed_any,
+			worldPosition = feedback_position,
+			targets = hit_targets,
+		})
 	end
 end
 
@@ -183,6 +231,7 @@ function PlayerCombatService.start()
 	did_start = true
 
 	get_remote().OnServerEvent:Connect(handle_swing)
+	combat_feedback_remote = Remotes.combat_feedback()
 	Players.PlayerAdded:Connect(hook_player)
 	Players.PlayerRemoving:Connect(function(player)
 		last_swing_by_user_id[player.UserId] = nil

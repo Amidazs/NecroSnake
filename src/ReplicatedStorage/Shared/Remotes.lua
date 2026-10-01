@@ -62,5 +62,9 @@ function Remotes.banish_request(): RemoteEvent
 	return Remotes.get_or_create_event("BanishRequest")
 end
 
+function Remotes.combat_feedback(): RemoteEvent
+	return Remotes.get_or_create_event("CombatFeedback")
+end
+
 
 return Remotes
