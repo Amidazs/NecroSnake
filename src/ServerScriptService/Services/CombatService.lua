@@ -432,6 +432,11 @@ local function initialize_corpse(model: Model)
 		destroy_corpse(model, "BANISHED")
 		return
 	end
+	if model:GetAttribute("LastDamageSourceKind") == "NPC" then
+		model:SetAttribute("NoRaiseReason", "NPC_KILL")
+		model:Destroy()
+		return
+	end
 
 	local root = get_root(model)
 	if not root then
@@ -456,6 +461,29 @@ local function initialize_corpse(model: Model)
 	-- Corpses leave active combat containers immediately. This prevents NPC
 	-- group cleanup/AI from deleting or retargeting them during the Raise window.
 	model.Parent = get_or_create_corpses_folder()
+
+	-- A dead unit is a static resource, not an active actor. Freeze movement and
+	-- collision immediately so old MoveTo/physics impulses cannot drag the corpse.
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.WalkSpeed = 0
+		humanoid.AutoRotate = false
+		humanoid.PlatformStand = true
+		local animator = humanoid:FindFirstChildOfClass("Animator")
+		if animator then
+			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+				track:Stop(0)
+			end
+		end
+	end
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.AssemblyLinearVelocity = Vector3.zero
+			descendant.AssemblyAngularVelocity = Vector3.zero
+			descendant.CanCollide = false
+		end
+	end
+	root.Anchored = true
 
 	create_corpse_soul(root)
 	update_corpse_visual(model, 0)

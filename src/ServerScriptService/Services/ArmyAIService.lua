@@ -1,7 +1,12 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+
+local Remotes = require(
+	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+)
 
 local ArmyAIService = {}
 
@@ -56,6 +61,12 @@ local UNIT_SPEED_MAX = 22
 local RETARGET_COOLDOWN_SECONDS = 0.6
 local RETARGET_HYSTERESIS = 2.0
 
+-- Whole-army command foundation.
+local COMMAND_MAX_DISTANCE = 120
+local COMMAND_ARRIVAL_DISTANCE = 4
+local RETREAT_COMPLETE_DISTANCE = 18
+local RETREAT_SPEED_MULTIPLIER = 1.15
+
 -- Attack approach:
 local APPROACH_RADIUS_MIN = 2.5
 local APPROACH_RADIUS_MARGIN = 0.6
@@ -70,7 +81,15 @@ type UnitState = {
 	next_retarget_time: number,
 }
 
+type ArmyCommandState = {
+	mode: string,
+	position: Vector3?,
+	target: Model?,
+}
+
 local state_by_unit: { [Model]: UnitState } = {}
+local command_by_user_id: { [number]: ArmyCommandState } = {}
+local command_remote: RemoteEvent? = nil
 
 local function now_seconds(): number
 	-- Server-safe monotonic-ish timer for cooldown checks.
@@ -344,6 +363,7 @@ local function stamp_last_hit_owner(attacker: Model, target: Model)
 		return
 	end
 
+	target:SetAttribute("LastDamageSourceKind", "PLAYER_ARMY")
 	target:SetAttribute("LastHitOwnerUserId", owner_user_id)
 	target:SetAttribute("LastHitTime", now())
 end
@@ -489,6 +509,358 @@ local function maybe_retarget_to_closer(unit_pos: Vector3, s: UnitState, candida
 	end
 end
 
+local function get_command_state(player: Player): ArmyCommandState
+	local existing = command_by_user_id[player.UserId]
+	if existing then
+		return existing
+	end
+
+	local created: ArmyCommandState = {
+		mode = "FOLLOW",
+		position = nil,
+		target = nil,
+	}
+	command_by_user_id[player.UserId] = created
+	player:SetAttribute("ArmyCommandMode", "FOLLOW")
+	return created
+end
+
+local function send_command_feedback(
+	player: Player,
+	mode: string,
+	message: string
+)
+	if command_remote then
+		command_remote:FireClient(player, {
+			mode = mode,
+			message = message,
+		})
+	end
+end
+
+local function set_command(
+	player: Player,
+	mode: string,
+	position: Vector3?,
+	target: Model?,
+	message: string
+)
+	command_by_user_id[player.UserId] = {
+		mode = mode,
+		position = position,
+		target = target,
+	}
+	player:SetAttribute("ArmyCommandMode", mode)
+	send_command_feedback(player, mode, message)
+end
+
+local function get_army_center(player: Player, fallback: Vector3): Vector3
+	local units: { Model } = army_service.get_army_units(player)
+	local total = Vector3.zero
+	local count = 0
+
+	for _, model in ipairs(units) do
+		if is_alive(model) then
+			local root = get_root(model)
+			if root then
+				total += root.Position
+				count += 1
+			end
+		end
+	end
+
+	if count <= 0 then
+		return fallback
+	end
+	return total / count
+end
+
+local function snap_command_position(player: Player, requested: Vector3): Vector3
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.IgnoreWater = false
+
+	local excluded: { Instance } = {}
+	if player.Character then
+		table.insert(excluded, player.Character)
+	end
+	local armies = Workspace:FindFirstChild("PlayerArmies")
+	if armies then
+		table.insert(excluded, armies)
+	end
+	params.FilterDescendantsInstances = excluded
+
+	local origin = requested + Vector3.new(0, 180, 0)
+	local result = Workspace:Raycast(origin, Vector3.new(0, -500, 0), params)
+	if result then
+		return result.Position
+	end
+	return requested
+end
+
+local function is_valid_command_target(player: Player, target: Model): boolean
+	if target == player.Character or not is_alive(target) then
+		return false
+	end
+
+	local owner_user_id = target:GetAttribute("ArmyOwnerUserId")
+	if typeof(owner_user_id) == "number" and owner_user_id == player.UserId then
+		return false
+	end
+
+	return true
+end
+
+local function handle_command_request(
+	player: Player,
+	action: any,
+	payload: any
+)
+	if typeof(action) ~= "string" then
+		return
+	end
+
+	local char = player.Character
+	local player_root = char and get_root(char)
+	if not player_root then
+		return
+	end
+
+	if action == "FOLLOW" then
+		set_command(
+			player,
+			"FOLLOW",
+			nil,
+			nil,
+			"Army regrouping and following."
+		)
+		return
+	end
+
+	if action == "RETREAT" then
+		set_command(
+			player,
+			"RETREAT",
+			nil,
+			nil,
+			"Army retreating to you."
+		)
+		return
+	end
+
+	if action == "HOLD" then
+		local center = get_army_center(player, player_root.Position)
+		set_command(
+			player,
+			"HOLD",
+			center,
+			nil,
+			"Army holding position."
+		)
+		return
+	end
+
+	if action == "MOVE" then
+		if typeof(payload) ~= "Vector3" then
+			send_command_feedback(player, get_command_state(player).mode, "Choose a ground position.")
+			return
+		end
+		if (payload - player_root.Position).Magnitude > COMMAND_MAX_DISTANCE then
+			send_command_feedback(player, get_command_state(player).mode, "That position is too far away.")
+			return
+		end
+
+		local position = snap_command_position(player, payload)
+		set_command(
+			player,
+			"MOVE",
+			position,
+			nil,
+			"Army moving to the marked position."
+		)
+		return
+	end
+
+	if action == "ATTACK" then
+		if typeof(payload) ~= "Instance" or not payload:IsA("Model") then
+			send_command_feedback(player, get_command_state(player).mode, "Choose an enemy target.")
+			return
+		end
+		if not is_valid_command_target(player, payload) then
+			send_command_feedback(player, get_command_state(player).mode, "That is not a valid enemy target.")
+			return
+		end
+
+		local target_root = get_root(payload)
+		if not target_root or (target_root.Position - player_root.Position).Magnitude > COMMAND_MAX_DISTANCE then
+			send_command_feedback(player, get_command_state(player).mode, "That enemy is too far away.")
+			return
+		end
+
+		set_command(
+			player,
+			"ATTACK",
+			nil,
+			payload,
+			"Army attacking the selected target."
+		)
+	end
+end
+
+local function tick_commanded_mode(
+	player: Player,
+	alive_units: { Model },
+	player_pos: Vector3,
+	player_speed: number
+): boolean
+	local command = get_command_state(player)
+	if command.mode == "FOLLOW" then
+		return false
+	end
+
+	local desired_speed = clamp(
+		player_speed * UNIT_SPEED_MULTIPLIER,
+		UNIT_SPEED_MIN,
+		UNIT_SPEED_MAX
+	)
+
+	if command.mode == "MOVE" or command.mode == "HOLD" then
+		local center = command.position or player_pos
+		local slots = compute_formation_slots(center, #alive_units)
+		local all_arrived = true
+
+		for i, unit_model in ipairs(alive_units) do
+			local root = get_root(unit_model)
+			local humanoid = get_humanoid(unit_model)
+			if not (root and humanoid) then
+				continue
+			end
+
+			humanoid.WalkSpeed = desired_speed
+			local state = get_or_create_state(unit_model)
+			state.target = nil
+
+			local slot = slots[i]
+			if slot then
+				local distance = (root.Position - slot).Magnitude
+				if distance > COMMAND_ARRIVAL_DISTANCE then
+					all_arrived = false
+					move_unit_smooth(humanoid, state, slot)
+				end
+			end
+		end
+
+		if command.mode == "MOVE" and all_arrived then
+			set_command(
+				player,
+				"HOLD",
+				center,
+				nil,
+				"Move complete. Army holding position."
+			)
+		end
+		return true
+	end
+
+	if command.mode == "RETREAT" then
+		local slots = compute_formation_slots(player_pos, #alive_units)
+		local all_close = true
+		local retreat_speed = clamp(
+			player_speed * RETREAT_SPEED_MULTIPLIER,
+			UNIT_SPEED_MIN,
+			UNIT_SPEED_MAX + 4
+		)
+
+		for i, unit_model in ipairs(alive_units) do
+			local root = get_root(unit_model)
+			local humanoid = get_humanoid(unit_model)
+			if not (root and humanoid) then
+				continue
+			end
+
+			humanoid.WalkSpeed = retreat_speed
+			local state = get_or_create_state(unit_model)
+			state.target = nil
+
+			if (root.Position - player_pos).Magnitude > RETREAT_COMPLETE_DISTANCE then
+				all_close = false
+			end
+
+			local slot = slots[i]
+			if slot then
+				move_unit_smooth(humanoid, state, slot)
+			end
+		end
+
+		if all_close then
+			set_command(
+				player,
+				"FOLLOW",
+				nil,
+				nil,
+				"Retreat complete. Army following."
+			)
+		end
+		return true
+	end
+
+	if command.mode == "ATTACK" then
+		local target = command.target
+		if not target or not is_valid_command_target(player, target) then
+			set_command(
+				player,
+				"FOLLOW",
+				nil,
+				nil,
+				"Target lost. Army following."
+			)
+			return true
+		end
+
+		local target_root = get_root(target)
+		if not target_root
+			or (target_root.Position - player_pos).Magnitude > COMMAND_MAX_DISTANCE
+		then
+			set_command(
+				player,
+				"FOLLOW",
+				nil,
+				nil,
+				"Target moved out of command range."
+			)
+			return true
+		end
+
+		for i, unit_model in ipairs(alive_units) do
+			local root = get_root(unit_model)
+			local humanoid = get_humanoid(unit_model)
+			if not (root and humanoid) then
+				continue
+			end
+
+			humanoid.WalkSpeed = desired_speed
+			local state = get_or_create_state(unit_model)
+			state.target = target
+
+			local distance = (root.Position - target_root.Position).Magnitude
+			if distance > (ATTACK_RANGE - 0.25) then
+				local approach = compute_attack_approach_goal(
+					unit_model,
+					i,
+					#alive_units,
+					target_root.Position
+				)
+				move_unit_smooth(humanoid, state, approach)
+			end
+			try_attack(unit_model, target, state)
+		end
+		return true
+	end
+
+	set_command(player, "FOLLOW", nil, nil, "Army following.")
+	return false
+end
+
 local function tick_player(player: Player)
 	if not army_service or not army_service.get_army_units then
 		return
@@ -520,6 +892,15 @@ local function tick_player(player: Player)
 		end
 	end
 	if #alive_units <= 0 then
+		return
+	end
+
+	if tick_commanded_mode(
+		player,
+		alive_units,
+		player_pos,
+		player_speed
+	) then
 		return
 	end
 
@@ -643,6 +1024,19 @@ function ArmyAIService.start()
 		return
 	end
 	running = true
+
+	command_remote = Remotes.army_command()
+	command_remote.OnServerEvent:Connect(handle_command_request)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		get_command_state(player)
+	end
+	Players.PlayerAdded:Connect(function(player)
+		get_command_state(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		command_by_user_id[player.UserId] = nil
+	end)
 
 	ai_task = task.spawn(function()
 		while running do

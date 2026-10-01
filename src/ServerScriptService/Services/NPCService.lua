@@ -1574,6 +1574,9 @@ function NPCService.start()
 									damage
 								)
 
+								state.target_model:SetAttribute("LastDamageSourceKind", "NPC")
+								state.target_model:SetAttribute("LastHitOwnerUserId", 0)
+								state.target_model:SetAttribute("LastHitTime", os.clock())
 								state.target_humanoid:TakeDamage(final_damage)
 							end
 						end

@@ -182,6 +182,7 @@ local function handle_swing(player: Player)
 				local damage = compute_damage(target)
 				local health_before = target_humanoid.Health
 
+				target:SetAttribute("LastDamageSourceKind", "PLAYER")
 				target:SetAttribute("LastHitOwnerUserId", player.UserId)
 				target:SetAttribute("LastHitTime", os.clock())
 				target_humanoid:TakeDamage(damage)

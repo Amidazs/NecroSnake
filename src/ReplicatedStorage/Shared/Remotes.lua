@@ -66,5 +66,9 @@ function Remotes.combat_feedback(): RemoteEvent
 	return Remotes.get_or_create_event("CombatFeedback")
 end
 
+function Remotes.army_command(): RemoteEvent
+	return Remotes.get_or_create_event("ArmyCommand")
+end
+
 
 return Remotes

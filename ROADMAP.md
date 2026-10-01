@@ -66,6 +66,8 @@ PvP is the centre of the game. PvE factions, bosses, collection, cloning, events
 - A failed attempt does not automatically prevent a later attempt if failures remain and the corpse timer has not expired.
 - Failure state should be readable visually: stable -> damaged/unstable -> critical -> soul collapse.
 - Once dead, a raisable corpse is protected from normal combat damage and active NPC/army cleanup until it is Raised, collapses, or expires.
+- Raisable corpses become completely inert on death: no AI movement, no residual MoveTo motion and no physics drift.
+- If an **NPC unit delivers the final blow**, the victim disappears immediately and creates no raisable corpse at all.
 - A Necromancer may **never Raise their own fallen undead**, even after another player's Soul Claim window has expired.
 - Even high-level Necromancers should not reach guaranteed capture rates for the rarest elites/bosses.
 
@@ -76,6 +78,7 @@ PvP is the centre of the game. PvE factions, bosses, collection, cloning, events
 - The UI must explain why the Raise cannot start and show required vs available Command Capacity.
 - The corpse timer continues while the player's army is full.
 - Players may **Banish** their own deployed undead to free capacity.
+- Banish has a visible HUD button as well as the keyboard/controller binding.
 - Banish permanently destroys that deployed unit.
 - Banished units leave no raisable corpse.
 - Units cannot be safely returned to the Base/backpack while remaining in the Arena.
@@ -217,25 +220,38 @@ Work:
 - Own-fallen-unit test confirmed the owner receives `You cannot Raise your own fallen undead.` immediately and again after the 6-second Soul Claim expires; the corpse remains available to other eligible Necromancers and the owner's failed-attempt count stays unchanged.
 - No-jump test confirmed client and server both report Jumping disabled, AutoJump off, JumpPower/JumpHeight at 0; forced client jump/state-change attempts produced effectively zero upward movement and the Humanoid remained in Running state.
 
-**Next Phase 1 slice:** hands-on player feel review of combat/Raise feedback and 5 -> 20 army growth; address any feel issues before declaring Phase 1 complete and moving to tactical formations/commands.
+**Next Phase 1 slice:** hands-on player feel review of combat/Raise feedback and 5 -> 20 army growth remains open while Phase 2 command work proceeds; address feel issues before declaring Phase 1 formally complete.
 
 ## Phase 2 - Tactical army control and formations
+
+**Status:** IN PROGRESS - whole-army command foundation GREEN on 1 October 2026.
 
 **Goal:** make the player feel like an army commander rather than a pet owner.
 
 Work:
-- Introduce cohorts/formations.
-- Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
-- Formation Editor in Base.
-- Save formation assignments.
-- Follow/Regroup.
-- Move Here.
-- Hold Position.
-- Attack Target.
-- Retreat.
-- Formation switching in combat.
-- Per-cohort behaviour where useful.
-- Better spacing, local avoidance and anti-pile-up.
+- [ ] Introduce cohorts/formations.
+- [ ] Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
+- [ ] Formation Editor in Base.
+- [ ] Save formation assignments.
+- [x] Follow/Regroup.
+- [x] Move Here.
+- [x] Hold Position.
+- [x] Attack Target.
+- [x] Retreat.
+- [ ] Formation switching in combat.
+- [ ] Per-cohort behaviour where useful.
+- [ ] Better spacing, local avoidance and anti-pile-up.
+
+**Command foundation test evidence:**
+- Hold kept a three-unit army at its commanded location while the player moved about 28 studs away.
+- Follow regrouped the army back to within about 1 stud of the player.
+- Move Here moved the army roughly 22 studs to the commanded point and automatically changed to Hold on arrival.
+- Attack Target kept the army focused on the selected controlled target and reduced it from 400 to 390 HP with `PLAYER_ARMY` final-damage attribution.
+- Retreat broke the attack command, reduced army/player separation from about 38 studs to about 4.6 studs, then automatically restored Follow.
+- Command UI exposes Follow -> Move Here -> Hold -> Attack Target -> Retreat in a fixed order without selecting individual units.
+- Visible Banish button was repositioned above the Veil Gate panel after visual QA; the `B` shortcut remains available.
+- Static-corpse regression test showed 0 studs movement and 0 velocity after death.
+- Real NPC final-blow test destroyed a 1-HP owned unit on the next NPC attack cycle with no entry created in `Workspace.Corpses`.
 
 **Acceptance:**
 - Player can build a shield-front / ranged-rear formation.

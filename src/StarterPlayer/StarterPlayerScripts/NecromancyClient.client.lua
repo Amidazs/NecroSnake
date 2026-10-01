@@ -62,6 +62,32 @@ local feedback_corner = Instance.new("UICorner")
 feedback_corner.CornerRadius = UDim.new(0, 8)
 feedback_corner.Parent = feedback
 
+local banish_button = Instance.new("TextButton")
+banish_button.Name = "BanishButton"
+banish_button.AnchorPoint = Vector2.new(1, 1)
+banish_button.Position = UDim2.new(1, -22, 1, -190)
+banish_button.Size = UDim2.fromOffset(150, 42)
+banish_button.BackgroundColor3 = Color3.fromRGB(32, 20, 28)
+banish_button.BackgroundTransparency = 0.08
+banish_button.BorderSizePixel = 0
+banish_button.Text = "Banish  [B]"
+banish_button.TextColor3 = Color3.fromRGB(240, 210, 220)
+banish_button.TextStrokeTransparency = 0.65
+banish_button.Font = Enum.Font.GothamBold
+banish_button.TextSize = 16
+banish_button.AutoButtonColor = true
+banish_button.Parent = gui
+
+local banish_corner = Instance.new("UICorner")
+banish_corner.CornerRadius = UDim.new(0, 8)
+banish_corner.Parent = banish_button
+
+local banish_stroke = Instance.new("UIStroke")
+banish_stroke.Color = Color3.fromRGB(135, 75, 100)
+banish_stroke.Transparency = 0.2
+banish_stroke.Thickness = 1.3
+banish_stroke.Parent = banish_button
+
 local message_token = 0
 local channel_prompt: ProximityPrompt? = nil
 local channel_started_at = 0
@@ -326,6 +352,16 @@ local function play_raise_result_fx(payload)
 	end
 end
 
+local function request_banish()
+	local target = get_aimed_model()
+	if not target then
+		show_message("Aim at one of your undead to Banish it.", "FAILED")
+		return
+	end
+
+	banish_remote:FireServer(target)
+end
+
 local function on_banish(
 	_action_name: string,
 	input_state: Enum.UserInputState,
@@ -335,15 +371,11 @@ local function on_banish(
 		return Enum.ContextActionResult.Pass
 	end
 
-	local target = get_aimed_model()
-	if not target then
-		show_message("Aim at one of your undead to Banish it.", "FAILED")
-		return Enum.ContextActionResult.Sink
-	end
-
-	banish_remote:FireServer(target)
+	request_banish()
 	return Enum.ContextActionResult.Sink
 end
+
+banish_button.MouseButton1Click:Connect(request_banish)
 
 result_remote.OnClientEvent:Connect(function(payload)
 	if typeof(payload) ~= "table" then
