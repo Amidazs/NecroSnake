@@ -147,8 +147,13 @@ local function update_distance_readability()
 	end
 end
 
-local function main()
-	local player_armies = Workspace:WaitForChild(PLAYER_ARMIES_FOLDER_NAME)
+local connected_armies: Folder? = nil
+
+local function hook_armies_folder(player_armies: Folder)
+	if connected_armies == player_armies then
+		return
+	end
+	connected_armies = player_armies
 	scan_existing(player_armies)
 
 	player_armies.DescendantAdded:Connect(function(inst)
@@ -160,6 +165,23 @@ local function main()
 	player_armies.DescendantRemoving:Connect(function(inst)
 		if inst:IsA("Model") then
 			remove_highlight(inst)
+		end
+	end)
+end
+
+local function main()
+	local existing = Workspace:FindFirstChild(
+		PLAYER_ARMIES_FOLDER_NAME
+	)
+	if existing and existing:IsA("Folder") then
+		hook_armies_folder(existing)
+	end
+
+	Workspace.ChildAdded:Connect(function(child)
+		if child.Name == PLAYER_ARMIES_FOLDER_NAME
+			and child:IsA("Folder")
+		then
+			hook_armies_folder(child)
 		end
 	end)
 

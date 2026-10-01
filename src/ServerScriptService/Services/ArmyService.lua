@@ -276,60 +276,6 @@ local function compute_spread_offset(
 	return Vector3.new(x + jx, 0, z + jz)
 end
 
-local NO_COLLISION_FOLDER_NAME = "NoCollisionWithLeader"
-
-local function get_collidable_parts(model: Model): { BasePart }
-	local parts: { BasePart } = {}
-	for _, inst in ipairs(model:GetDescendants()) do
-		if inst:IsA("BasePart") and inst.CanCollide then
-			table.insert(parts, inst)
-		end
-	end
-	return parts
-end
-
-local function clear_no_collision_constraints(unit_model: Model)
-	local folder = unit_model:FindFirstChild(NO_COLLISION_FOLDER_NAME)
-	if not folder then
-		return
-	end
-	for _, child in ipairs(folder:GetChildren()) do
-		if child:IsA("NoCollisionConstraint") then
-			child:Destroy()
-		end
-	end
-end
-
-local function ensure_no_collision_folder(unit_model: Model): Folder
-	local existing = unit_model:FindFirstChild(NO_COLLISION_FOLDER_NAME)
-	if existing and existing:IsA("Folder") then
-		return existing
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = NO_COLLISION_FOLDER_NAME
-	folder.Parent = unit_model
-	return folder
-end
-
-local function disable_collision_with_leader(unit_model: Model, leader_model: Model)
-	-- Units should collide with one another, but not with their own leader
-	-- (including the player character).
-	local folder = ensure_no_collision_folder(unit_model)
-	clear_no_collision_constraints(unit_model)
-
-	local unit_parts = get_collidable_parts(unit_model)
-	local leader_parts = get_collidable_parts(leader_model)
-
-	for _, unit_part in ipairs(unit_parts) do
-		for _, leader_part in ipairs(leader_parts) do
-			local c = Instance.new("NoCollisionConstraint")
-			c.Part0 = unit_part
-			c.Part1 = leader_part
-			c.Parent = folder
-		end
-	end
-end
-
 local function spawn_one_unit(
 	player: Player,
 	template_name: string,
@@ -392,11 +338,6 @@ local function spawn_one_unit(
 		model_library_service.set_units_collision(model)
 	end
 
-	local leader_model = player.Character
-	if leader_model and leader_model:IsA("Model") then
-		disable_collision_with_leader(model, leader_model)
-	end
-
 	local humanoid = get_humanoid(model)
 	local root = get_root(model)
 
@@ -404,6 +345,25 @@ local function spawn_one_unit(
 		model:Destroy()
 		return nil
 	end
+
+	-- The owning client simulates its army physics. Damage, targeting,
+	-- leashing, command validation and corrective teleports remain server-side.
+	-- This distributes the expensive humanoid assemblies across clients instead
+	-- of forcing one server to simulate every player's full army.
+	local ownership_ok = pcall(function()
+		root:SetNetworkOwner(player)
+	end)
+	if not ownership_ok then
+		pcall(function()
+			root:SetNetworkOwnershipAuto()
+		end)
+	end
+
+	humanoid.AutoJumpEnabled = false
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 
 	local unit: ArmyUnit = {
 		model = model,
@@ -572,6 +532,9 @@ function ArmyService.init(model_library, formation_profile_service_ref: any?)
 		initialize_player_progression(player)
 		player.CharacterAdded:Connect(function(character)
 			ensure_player_death_hooks(player, character)
+			if model_library_service.set_leaders_collision then
+				model_library_service.set_leaders_collision(character)
+			end
 
 			task.defer(function()
 				task.wait(0.1)
@@ -588,6 +551,11 @@ function ArmyService.init(model_library, formation_profile_service_ref: any?)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		initialize_player_progression(player)
+		if player.Character
+			and model_library_service.set_leaders_collision
+		then
+			model_library_service.set_leaders_collision(player.Character)
+		end
 	end
 end
 

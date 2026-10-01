@@ -1,14 +1,12 @@
 --!strict
 
-local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local Remotes = require(
-	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local ArrowTracerPool = require(Shared:WaitForChild("ArrowTracerPool"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local ArmyAIService = {}
 
@@ -44,16 +42,20 @@ local TARGET_LEASH_RANGE = 45
 local ATTACK_RANGE = 6
 
 local AI_TICK_SECONDS = 0.35
-local TARGET_ACQUISITION_BUCKETS = 3
 local METRIC_REPORT_SECONDS = 2
+local CANDIDATE_CACHE_SECONDS = 0.7
+local CANDIDATE_CACHE_MOVE_DISTANCE = 18
+local NEAR_UNIT_UPDATE_DISTANCE = 40
+local MID_UNIT_UPDATE_DISTANCE = 65
+local MID_UNIT_UPDATE_CYCLES = 2
+local FAR_UNIT_UPDATE_CYCLES = 3
+local SEPARATION_REFRESH_SMALL = 0.35
+local SEPARATION_REFRESH_MEDIUM = 0.7
+local SEPARATION_REFRESH_LARGE = 1.05
+local MEDIUM_ARMY_SIZE = 80
+local LARGE_ARMY_SIZE = 180
 
 -- Formation:
-local RING_SPACING = 7
-local MIN_RING_RADIUS = 8
-local MAX_UNITS_PER_RING = 10
-local COHORT_SPACING = 5
-local COHORT_ROW_SPACING = 4
-
 local COHORT_ORDER = {
 	"Frontline",
 	"SecondLine",
@@ -139,10 +141,6 @@ local UNIT_SPEED_MULTIPLIER = 0.95
 local UNIT_SPEED_MIN = 10
 local UNIT_SPEED_MAX = 22
 
--- Retargeting:
-local RETARGET_COOLDOWN_SECONDS = 0.6
-local RETARGET_HYSTERESIS = 2.0
-
 -- Cohort combat behaviour.
 local PERSONAL_GUARD_ENGAGE_RANGE = 20
 local REAR_GUARD_ENGAGE_RANGE = 30
@@ -181,8 +179,6 @@ type UnitState = {
 	last_move_goal: Vector3?,
 	last_move_time: number,
 
-	next_retarget_time: number,
-
 	last_progress_position: Vector3?,
 	last_progress_time: number,
 	stuck_recoveries: number,
@@ -202,9 +198,23 @@ type AiMetricState = {
 	max_ms: number,
 }
 
+type CandidateCacheState = {
+	position: Vector3,
+	candidates: { Model },
+	next_refresh: number,
+}
+
+type SeparationCacheState = {
+	offsets: { [Model]: Vector3 },
+	unit_count: number,
+	next_refresh: number,
+}
+
 local state_by_unit: { [Model]: UnitState } = {}
 local command_by_user_id: { [number]: ArmyCommandState } = {}
 local metrics_by_user_id: { [number]: AiMetricState } = {}
+local candidate_cache_by_user_id: { [number]: CandidateCacheState } = {}
+local separation_cache_by_user_id: { [number]: SeparationCacheState } = {}
 local command_remote: RemoteEvent? = nil
 local ai_cycle = 0
 local next_metric_publish = 0
@@ -355,8 +365,6 @@ local function get_or_create_state(unit_model: Model): UnitState
 		last_move_goal = nil,
 		last_move_time = 0,
 
-		next_retarget_time = 0,
-
 		last_progress_position = nil,
 		last_progress_time = now(),
 		stuck_recoveries = 0,
@@ -476,22 +484,33 @@ local function get_enemy_candidates_near_player(
 	return candidates
 end
 
-local function find_closest_to_unit(unit_pos: Vector3, candidates: { Model }): Model?
-	local best: Model? = nil
-	local best_dist = math.huge
-
-	for _, m in ipairs(candidates) do
-		local r = get_root(m)
-		if r then
-			local dist = (r.Position - unit_pos).Magnitude
-			if dist < best_dist then
-				best_dist = dist
-				best = m
-			end
-		end
+local function get_cached_enemy_candidates(
+	player: Player,
+	player_pos: Vector3
+): { Model }
+	local current_time = now()
+	local cache = candidate_cache_by_user_id[player.UserId]
+	local moved_distance = math.huge
+	if cache then
+		moved_distance = (player_pos - cache.position).Magnitude
 	end
 
-	return best
+	if not cache
+		or current_time >= cache.next_refresh
+		or moved_distance >= CANDIDATE_CACHE_MOVE_DISTANCE
+	then
+		cache = {
+			position = player_pos,
+			candidates = get_enemy_candidates_near_player(
+				player,
+				player_pos
+			),
+			next_refresh = current_time + CANDIDATE_CACHE_SECONDS,
+		}
+		candidate_cache_by_user_id[player.UserId] = cache
+	end
+
+	return cache.candidates
 end
 
 local function compute_damage_after_defense(target: Model, raw_damage: number): number
@@ -514,34 +533,11 @@ local function get_spawn_time_seed(model: Model): number
 	return 0
 end
 
-local function emit_arrow_tracer(from_root: BasePart, target_root: BasePart)
-	local start_pos = from_root.Position + Vector3.new(0, 1.5, 0)
-	local end_pos = target_root.Position + Vector3.new(0, 1.2, 0)
-	local delta = end_pos - start_pos
-	if delta.Magnitude < 0.1 then
-		return
-	end
-
-	local arrow = Instance.new("Part")
-	arrow.Name = "NecroArrowTracer"
-	arrow.Size = Vector3.new(0.12, 0.12, 1.7)
-	arrow.Color = Color3.fromRGB(117, 79, 44)
-	arrow.Material = Enum.Material.Wood
-	arrow.Anchored = true
-	arrow.CanCollide = false
-	arrow.CanTouch = false
-	arrow.CanQuery = false
-	arrow.CastShadow = false
-	arrow.CFrame = CFrame.lookAt(start_pos, end_pos)
-	arrow.Parent = Workspace
-
-	local travel_time = clamp(delta.Magnitude / 85, 0.12, 0.42)
-	TweenService:Create(
-		arrow,
-		TweenInfo.new(travel_time, Enum.EasingStyle.Linear),
-		{ CFrame = CFrame.lookAt(end_pos, end_pos + delta.Unit) }
-	):Play()
-	Debris:AddItem(arrow, travel_time + 0.08)
+local function emit_arrow_tracer(
+	from_root: BasePart,
+	target_root: BasePart
+)
+	ArrowTracerPool.emit(from_root, target_root)
 end
 
 local function stamp_last_hit_owner(attacker: Model, target: Model)
@@ -624,35 +620,6 @@ local function compute_attack_approach_goal(
 	return Vector3.new(target_pos.X, target_pos.Y, target_pos.Z) + offset
 end
 
-local function compute_formation_slots(center: Vector3, count: number): { Vector3 }
-	local slots: { Vector3 } = {}
-
-	if count <= 0 then
-		return slots
-	end
-
-	local remaining = count
-	local ring = 1
-
-	while remaining > 0 do
-		local radius = MIN_RING_RADIUS + ((ring - 1) * RING_SPACING)
-		local ring_capacity = math.min(MAX_UNITS_PER_RING, remaining)
-		local angle_step = (math.pi * 2) / ring_capacity
-
-		for i = 1, ring_capacity do
-			local angle = (i - 1) * angle_step
-			local x = math.cos(angle) * radius
-			local z = math.sin(angle) * radius
-			table.insert(slots, Vector3.new(center.X + x, center.Y, center.Z + z))
-		end
-
-		remaining -= ring_capacity
-		ring += 1
-	end
-
-	return slots
-end
-
 local function get_unit_cohort(unit_model: Model): string
 	local cohort = unit_model:GetAttribute("Cohort")
 	if typeof(cohort) == "string" and VALID_COHORTS[cohort] then
@@ -717,7 +684,8 @@ local function compute_band_slot(
 	base_z: number,
 	max_per_row: number,
 	spacing: number,
-	row_spacing: number
+	row_spacing: number,
+	row_direction: number
 ): Vector3
 	local row = math.floor((index - 1) / max_per_row)
 	local first_in_row = row * max_per_row
@@ -725,8 +693,32 @@ local function compute_band_slot(
 	local row_count = math.min(max_per_row, remaining)
 	local position_in_row = index - first_in_row
 	local x = (position_in_row - ((row_count + 1) * 0.5)) * spacing
-	local z = base_z + (row * row_spacing)
+	local z = base_z + (row * row_spacing * row_direction)
 	return anchor:PointToWorldSpace(Vector3.new(x, 0, z))
+end
+
+local function assign_band_slots(
+	anchor: CFrame,
+	indices: { number },
+	slots: { Vector3 },
+	base_z: number,
+	max_per_row: number,
+	spacing: number,
+	row_spacing: number,
+	row_direction: number
+)
+	for local_index, unit_index in ipairs(indices) do
+		slots[unit_index] = compute_band_slot(
+			anchor,
+			local_index,
+			#indices,
+			base_z,
+			max_per_row,
+			spacing,
+			row_spacing,
+			row_direction
+		)
+	end
 end
 
 local function compute_cohort_formation_slots(
@@ -758,34 +750,133 @@ local function compute_cohort_formation_slots(
 		or FORMATION_PRESETS.Standard
 	local slots: { Vector3 } = table.create(#units)
 
-	local function assign_band(cohort: string, base_z: number, max_per_row: number)
-		local indices = groups[cohort]
-		for local_index, unit_index in ipairs(indices) do
-			slots[unit_index] = compute_band_slot(
-				anchor,
-				local_index,
-				#indices,
-				base_z,
-				max_per_row,
-				preset.spacing,
-				preset.rowSpacing
-			)
-		end
-	end
+	local is_large_formation = #units > 60
+	local wide_row_capacity = math.clamp(
+		math.ceil(math.sqrt(#units) * 1.1),
+		12,
+		20
+	)
 
-	assign_band("Frontline", preset.frontline, 6)
-	assign_band("SecondLine", preset.secondLine, 6)
-	assign_band("Ranged", preset.ranged, 7)
-	assign_band("RearGuard", preset.rearGuard, 6)
-	assign_band("PersonalGuard", preset.personalGuard, 4)
+	if is_large_formation then
+		assign_band_slots(
+			anchor,
+			groups.Frontline,
+			slots,
+			preset.frontline - 4,
+			wide_row_capacity,
+			preset.spacing,
+			preset.rowSpacing,
+			-1
+		)
+		assign_band_slots(
+			anchor,
+			groups.SecondLine,
+			slots,
+			preset.secondLine + 1,
+			wide_row_capacity,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.Ranged,
+			slots,
+			preset.ranged + 5,
+			wide_row_capacity,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.RearGuard,
+			slots,
+			preset.rearGuard + 14,
+			math.min(wide_row_capacity, 16),
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.PersonalGuard,
+			slots,
+			preset.personalGuard,
+			8,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+	else
+		assign_band_slots(
+			anchor,
+			groups.Frontline,
+			slots,
+			preset.frontline,
+			6,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.SecondLine,
+			slots,
+			preset.secondLine,
+			6,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.Ranged,
+			slots,
+			preset.ranged,
+			7,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.RearGuard,
+			slots,
+			preset.rearGuard,
+			6,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+		assign_band_slots(
+			anchor,
+			groups.PersonalGuard,
+			slots,
+			preset.personalGuard,
+			4,
+			preset.spacing,
+			preset.rowSpacing,
+			1
+		)
+	end
 
 	local flank_indices = groups.Flanks
 	for local_index, unit_index in ipairs(flank_indices) do
 		local pair_index = math.floor((local_index - 1) / 2)
 		local side = local_index % 2 == 1 and -1 or 1
-		local x = side * (preset.flankX + (pair_index * preset.flankStep))
-		local z = preset.flankZ + ((pair_index % 3) * preset.rowSpacing)
-		slots[unit_index] = anchor:PointToWorldSpace(Vector3.new(x, 0, z))
+		local large_offset = is_large_formation and 12 or 0
+		local x = side * (
+			preset.flankX
+			+ large_offset
+			+ (pair_index * preset.flankStep)
+		)
+		local row_modulus = is_large_formation and 8 or 3
+		local z = preset.flankZ
+			+ ((pair_index % row_modulus) * preset.rowSpacing)
+		slots[unit_index] = anchor:PointToWorldSpace(
+			Vector3.new(x, 0, z)
+		)
 	end
 
 	return slots
@@ -908,6 +999,40 @@ local function build_separation_offsets(units: { Model }): { [Model]: Vector3 }
 	return offsets
 end
 
+local function get_separation_refresh_seconds(
+	unit_count: number
+): number
+	if unit_count >= LARGE_ARMY_SIZE then
+		return SEPARATION_REFRESH_LARGE
+	end
+	if unit_count >= MEDIUM_ARMY_SIZE then
+		return SEPARATION_REFRESH_MEDIUM
+	end
+	return SEPARATION_REFRESH_SMALL
+end
+
+local function get_cached_separation_offsets(
+	player: Player,
+	units: { Model }
+): { [Model]: Vector3 }
+	local current_time = now()
+	local cache = separation_cache_by_user_id[player.UserId]
+	if not cache
+		or cache.unit_count ~= #units
+		or current_time >= cache.next_refresh
+	then
+		cache = {
+			offsets = build_separation_offsets(units),
+			unit_count = #units,
+			next_refresh = current_time
+				+ get_separation_refresh_seconds(#units),
+		}
+		separation_cache_by_user_id[player.UserId] = cache
+	end
+
+	return cache.offsets
+end
+
 local function with_separation(
 	goal: Vector3,
 	unit_model: Model,
@@ -952,7 +1077,8 @@ local function compute_combat_goal(
 			preferred_range,
 			width,
 			4.5,
-			3.5
+			3.5,
+			1
 		)
 	end
 
@@ -964,7 +1090,8 @@ local function compute_combat_goal(
 			math.min(attack_range - 0.5, preferred_range + 4),
 			6,
 			4.5,
-			3.5
+			3.5,
+			1
 		)
 	end
 
@@ -985,7 +1112,8 @@ local function compute_combat_goal(
 		base_z,
 		melee_row_size,
 		2.4,
-		2.2
+		2.2,
+		1
 	)
 end
 
@@ -1012,7 +1140,13 @@ local function find_closest_engageable(
 	local best_distance = math.huge
 
 	for _, candidate in ipairs(candidates) do
-		if should_unit_engage_target(unit_model, candidate, player_pos) then
+		if is_alive(candidate)
+			and should_unit_engage_target(
+				unit_model,
+				candidate,
+				player_pos
+			)
+		then
 			local root = get_root(candidate)
 			if root then
 				local distance = (root.Position - unit_pos).Magnitude
@@ -1100,10 +1234,22 @@ local function move_unit_smooth(humanoid: Humanoid, s: UnitState, goal: Vector3)
 				s.last_move_time = 0
 
 				task.delay(0.8, function()
-					if root and root.Parent then
-						pcall(function()
-							root:SetNetworkOwnershipAuto()
-						end)
+					if root and root.Parent and model.Parent then
+						local owner_user_id = model:GetAttribute(
+							"ArmyOwnerUserId"
+						)
+						local owner = typeof(owner_user_id) == "number"
+							and Players:GetPlayerByUserId(owner_user_id)
+							or nil
+						if owner then
+							pcall(function()
+								root:SetNetworkOwner(owner)
+							end)
+						else
+							pcall(function()
+								root:SetNetworkOwnershipAuto()
+							end)
+						end
 					end
 				end)
 			end
@@ -1120,49 +1266,6 @@ local function move_unit_smooth(humanoid: Humanoid, s: UnitState, goal: Vector3)
 	s.last_move_goal = goal
 	s.last_move_time = t
 	humanoid:MoveTo(goal)
-end
-
-local function maybe_retarget_to_closer(
-	unit_model: Model,
-	unit_pos: Vector3,
-	player_pos: Vector3,
-	s: UnitState,
-	candidates: { Model }
-)
-	if now() < s.next_retarget_time then
-		return
-	end
-
-	if not s.target then
-		return
-	end
-
-	local t_root = get_root(s.target)
-	if not t_root then
-		return
-	end
-
-	local current_dist = (t_root.Position - unit_pos).Magnitude
-	local best = find_closest_engageable(
-		unit_model,
-		unit_pos,
-		player_pos,
-		candidates
-	)
-	if not best or best == s.target then
-		return
-	end
-
-	local best_root = get_root(best)
-	if not best_root then
-		return
-	end
-
-	local best_dist = (best_root.Position - unit_pos).Magnitude
-	if best_dist + RETARGET_HYSTERESIS < current_dist then
-		s.target = best
-		s.next_retarget_time = now() + RETARGET_COOLDOWN_SECONDS
-	end
 end
 
 local function get_command_state(player: Player): ArmyCommandState
@@ -1460,7 +1563,7 @@ local function tick_commanded_mode(
 		UNIT_SPEED_MAX
 	)
 	local preset_name = get_formation_preset(player)
-	local separation_offsets = build_separation_offsets(alive_units)
+	local separation_offsets = get_cached_separation_offsets(player, alive_units)
 	local cohort_meta = build_cohort_meta(alive_units)
 
 	if command.mode == "MOVE" or command.mode == "HOLD" then
@@ -1472,7 +1575,17 @@ local function tick_commanded_mode(
 			alive_units,
 			preset_name
 		)
-		local all_arrived = true
+		local arrival_distance = COMMAND_ARRIVAL_DISTANCE
+		local required_arrival_ratio = 1
+		if #alive_units > LARGE_ARMY_SIZE then
+			arrival_distance = 5
+			required_arrival_ratio = 0.95
+		elseif #alive_units > 60 then
+			arrival_distance = 4
+			required_arrival_ratio = 0.95
+		end
+		local arrived_count = 0
+		local valid_slot_count = 0
 
 		for i, unit_model in ipairs(alive_units) do
 			local root = get_root(unit_model)
@@ -1487,20 +1600,27 @@ local function tick_commanded_mode(
 
 			local slot = slots[i]
 			if slot then
+				valid_slot_count += 1
 				local goal = with_separation(
 					slot,
 					unit_model,
 					separation_offsets
 				)
 				local distance = (root.Position - slot).Magnitude
-				if distance > COMMAND_ARRIVAL_DISTANCE then
-					all_arrived = false
+				if distance <= arrival_distance then
+					arrived_count += 1
+				else
 					move_unit_smooth(humanoid, state, goal)
 				end
 			end
 		end
 
-		if command.mode == "MOVE" and all_arrived then
+		local arrival_ratio = valid_slot_count > 0
+			and arrived_count / valid_slot_count
+			or 1
+		if command.mode == "MOVE"
+			and arrival_ratio >= required_arrival_ratio
+		then
 			set_command(
 				player,
 				"HOLD",
@@ -1518,12 +1638,26 @@ local function tick_commanded_mode(
 			alive_units,
 			preset_name
 		)
-		local all_close = true
 		local retreat_speed = clamp(
 			player_speed * RETREAT_SPEED_MULTIPLIER,
 			UNIT_SPEED_MIN,
 			UNIT_SPEED_MAX + 4
 		)
+		local required_arrival_ratio = 1
+		local slot_arrival_distance = RETREAT_COMPLETE_DISTANCE
+		local use_slot_arrival = false
+		if #alive_units > LARGE_ARMY_SIZE then
+			required_arrival_ratio = 0.95
+			slot_arrival_distance = 6
+			use_slot_arrival = true
+		elseif #alive_units > 60 then
+			required_arrival_ratio = 0.95
+			slot_arrival_distance = 5
+			use_slot_arrival = true
+		end
+
+		local arrived_count = 0
+		local valid_slot_count = 0
 
 		for i, unit_model in ipairs(alive_units) do
 			local root = get_root(unit_model)
@@ -1536,12 +1670,20 @@ local function tick_commanded_mode(
 			local state = get_or_create_state(unit_model)
 			state.target = nil
 
-			if (root.Position - player_pos).Magnitude > RETREAT_COMPLETE_DISTANCE then
-				all_close = false
-			end
-
 			local slot = slots[i]
 			if slot then
+				valid_slot_count += 1
+				local arrival_distance: number
+				if use_slot_arrival then
+					arrival_distance = (root.Position - slot).Magnitude
+				else
+					arrival_distance = (root.Position - player_pos).Magnitude
+				end
+
+				if arrival_distance <= slot_arrival_distance then
+					arrived_count += 1
+				end
+
 				move_unit_smooth(
 					humanoid,
 					state,
@@ -1550,7 +1692,10 @@ local function tick_commanded_mode(
 			end
 		end
 
-		if all_close then
+		local arrival_ratio = valid_slot_count > 0
+			and arrived_count / valid_slot_count
+			or 1
+		if arrival_ratio >= required_arrival_ratio then
 			set_command(
 				player,
 				"FOLLOW",
@@ -1667,14 +1812,52 @@ local function tick_commanded_mode(
 	return false
 end
 
-local function should_refresh_target(unit_model: Model): boolean
-	local unit_id = unit_model:GetAttribute("ArmyUnitId")
-	if typeof(unit_id) ~= "number" then
+local function build_cohort_targets(
+	alive_units: { Model },
+	cohort_meta: { [Model]: any },
+	player_pos: Vector3,
+	candidates: { Model }
+): { [string]: Model? }
+	local targets: { [string]: Model? } = {}
+	local processed_cohorts: { [string]: boolean } = {}
+
+	for _, unit_model in ipairs(alive_units) do
+		local meta = cohort_meta[unit_model]
+		local cohort = meta and meta.cohort
+		if cohort and not processed_cohorts[cohort] then
+			processed_cohorts[cohort] = true
+			local root = get_root(unit_model)
+			if root then
+				targets[cohort] = find_closest_engageable(
+					unit_model,
+					root.Position,
+					player_pos,
+					candidates
+				)
+			end
+		end
+	end
+
+	return targets
+end
+
+local function should_update_unit_movement(
+	unit_model: Model,
+	distance_to_player: number
+): boolean
+	if distance_to_player <= NEAR_UNIT_UPDATE_DISTANCE then
 		return true
 	end
 
-	local bucket = math.floor(unit_id) % TARGET_ACQUISITION_BUCKETS
-	return bucket == (ai_cycle % TARGET_ACQUISITION_BUCKETS)
+	local unit_id = unit_model:GetAttribute("ArmyUnitId")
+	local stable_id = typeof(unit_id) == "number"
+		and math.floor(unit_id)
+		or 0
+
+	if distance_to_player <= MID_UNIT_UPDATE_DISTANCE then
+		return (ai_cycle + stable_id) % MID_UNIT_UPDATE_CYCLES == 0
+	end
+	return (ai_cycle + stable_id) % FAR_UNIT_UPDATE_CYCLES == 0
 end
 
 local function record_tick_metric(player: Player, elapsed_seconds: number)
@@ -1712,8 +1895,18 @@ local function publish_metrics_if_due()
 			unit_count = #army_service.get_army_units(player)
 		end
 		player:SetAttribute("ArmyAIUnitCount", unit_count)
+
+		local candidate_cache = candidate_cache_by_user_id[player.UserId]
+		local candidate_count = candidate_cache
+			and #candidate_cache.candidates
+			or 0
+		player:SetAttribute("ArmyAICandidateCount", candidate_count)
 		metrics_by_user_id[player.UserId] = nil
 	end
+
+	local active_tracers, pooled_tracers = ArrowTracerPool.get_stats()
+	Workspace:SetAttribute("ActiveArrowTracers", active_tracers)
+	Workspace:SetAttribute("PooledArrowTracers", pooled_tracers)
 end
 
 local function tick_player(player: Player)
@@ -1772,9 +1965,18 @@ local function tick_player(player: Player)
 		alive_units,
 		preset_name
 	)
-	local separation_offsets = build_separation_offsets(alive_units)
+	local separation_offsets = get_cached_separation_offsets(
+		player,
+		alive_units
+	)
 	local cohort_meta = build_cohort_meta(alive_units)
-	local candidates = get_enemy_candidates_near_player(player, player_pos)
+	local candidates = get_cached_enemy_candidates(player, player_pos)
+	local cohort_targets = build_cohort_targets(
+		alive_units,
+		cohort_meta,
+		player_pos,
+		candidates
+	)
 
 	for i, unit_model in ipairs(alive_units) do
 		local u_root = get_root(unit_model)
@@ -1787,7 +1989,6 @@ local function tick_player(player: Player)
 
 		local s = get_or_create_state(unit_model)
 
-		-- Leash to player.
 		-- Leash to player.
 		local dist_to_player = (u_root.Position - player_pos).Magnitude
 
@@ -1824,40 +2025,16 @@ local function tick_player(player: Player)
 		end
 
 
-		-- Spread expensive target searches across several AI cycles.
-		if not s.target then
-			if should_refresh_target(unit_model) then
-				local best = find_closest_engageable(
-					unit_model,
-					u_root.Position,
-					player_pos,
-					candidates
-				)
-				if best then
-					s.target = best
-					s.next_retarget_time = now() + RETARGET_COOLDOWN_SECONDS
-				end
-			end
+		-- Target selection is a cohort-level decision. Hundreds of units
+		-- therefore share six inexpensive target searches instead of each
+		-- scanning the complete candidate list.
+		local meta = cohort_meta[unit_model]
+		local cohort = meta and meta.cohort
+		local cohort_target = cohort and cohort_targets[cohort] or nil
+		if cohort_target and is_alive(cohort_target) then
+			s.target = cohort_target
 		else
-			-- Validate every cycle, but only search for a better target in
-			-- this unit's acquisition bucket.
-			if not is_alive(s.target)
-				or not should_unit_engage_target(
-					unit_model,
-					s.target,
-					player_pos
-				)
-			then
-				s.target = nil
-			elseif should_refresh_target(unit_model) then
-				maybe_retarget_to_closer(
-					unit_model,
-					u_root.Position,
-					player_pos,
-					s,
-					candidates
-				)
-			end
+			s.target = nil
 		end
 
 		-- Act.
@@ -1875,8 +2052,12 @@ local function tick_player(player: Player)
 					should_reposition = true
 				end
 
-				if should_reposition then
-					local meta = cohort_meta[unit_model]
+				if should_reposition
+					and should_update_unit_movement(
+						unit_model,
+						dist_to_player
+					)
+				then
 					local approach = compute_combat_goal(
 						unit_model,
 						meta and meta.index or 1,
@@ -1901,7 +2082,12 @@ local function tick_player(player: Player)
 			end
 		end
 
-		if not s.target then
+		if not s.target
+			and should_update_unit_movement(
+				unit_model,
+				dist_to_player
+			)
+		then
 			local slot = slots[i]
 			if slot then
 				move_unit_smooth(
@@ -1935,6 +2121,9 @@ function ArmyAIService.start()
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		command_by_user_id[player.UserId] = nil
+		metrics_by_user_id[player.UserId] = nil
+		candidate_cache_by_user_id[player.UserId] = nil
+		separation_cache_by_user_id[player.UserId] = nil
 	end)
 
 	ai_task = task.spawn(function()

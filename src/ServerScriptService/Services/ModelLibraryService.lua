@@ -470,6 +470,20 @@ local function ensure_collision_groups_exist()
 	pcall(function()
 		PhysicsService:RegisterCollisionGroup(COLLISION_GROUP_LEADERS)
 	end)
+
+	-- Hundreds of owned units cannot afford pairwise body collisions.
+	-- Local separation preserves readable spacing while the collision matrix
+	-- prevents the physics solver from resolving army-vs-army contacts.
+	PhysicsService:CollisionGroupSetCollidable(
+		COLLISION_GROUP_UNITS,
+		COLLISION_GROUP_UNITS,
+		false
+	)
+	PhysicsService:CollisionGroupSetCollidable(
+		COLLISION_GROUP_UNITS,
+		COLLISION_GROUP_LEADERS,
+		false
+	)
 end
 
 local function set_descendants_collision_group(model: Model, group_name: string)

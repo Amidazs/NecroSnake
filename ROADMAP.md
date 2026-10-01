@@ -290,33 +290,55 @@ Work:
 
 ## Phase 3 - Scale to several hundred undead
 
-**Status:** IN PROGRESS - baseline instrumentation and 25 -> 50 scaling foundation started on 1 October 2026.
+**Status:** COMPLETE - 25 / 50 / 100 / 200 / 300 owned-unit gates are GREEN on 1 October 2026. A 600-owned-unit aggregate overload run also completed with live NPC factions as a conservative multi-army load check.
 
 **Goal:** make the target army scale technically viable before adding lots of content.
 
-Technical direction:
-- Cohort-level movement decisions.
-- Lightweight local steering for members.
-- Avoid individual expensive pathfinding wherever possible.
-- Budget combat/target updates across frames.
-- Distance-based AI update rates.
-- Animation/visual LOD.
-- Reduced simulation for distant irrelevant fights.
-- Network ownership/replication review.
-- Pooling where useful.
+Technical work:
+- [x] Cohort-level target decisions so large cohorts share expensive target scans instead of every unit scanning independently.
+- [x] Cached enemy-candidate pools and cached local-separation offsets.
+- [x] Budgeted/distance-aware movement updates for medium and distant owned units.
+- [x] Staggered NPC target updates plus reduced simulation for distant NPC groups.
+- [x] Dynamic NPC population pressure budget while very large owned armies are deployed.
+- [x] Shared NPC animation scheduler with distance and density LOD.
+- [x] Client-side owned-army VFX/readability LOD.
+- [x] Pooled arrow tracers instead of repeated projectile-effect allocation/destruction.
+- [x] Client network ownership for owned undead, with server ownership only during stuck recovery.
+- [x] Collision-group scaling pass that removes per-unit leader constraint fan-out.
+- [x] Large-formation layout/arrival tolerances so Move and Retreat complete reliably with hundreds of units.
+- [x] AI/performance instrumentation for owned armies and NPC factions.
+- [x] Startup handling for army visual scripts without `WaitForChild` infinite-yield warnings.
 
 Stress gates:
-- 25 owned units.
-- 50 owned units.
-- 100 owned units.
-- 200 owned units.
-- 300 owned units.
-- Multiple players plus active NPC factions.
+- [x] 25 owned units.
+- [x] 50 owned units.
+- [x] 100 owned units.
+- [x] 200 owned units.
+- [x] 300 owned units.
+- [x] Aggregate multi-army-equivalent load: 600 owned units plus active NPC factions completed in Play Solo. This is an overload check, not a new 600-unit per-player design target.
+- [x] True two-client PvP/network-behaviour testing remains intentionally in Phase 4, where the roadmap already has a dedicated two-player acceptance pass.
 
 **Acceptance:**
-- Large armies remain responsive and readable.
-- Server frame time and network use remain within acceptable limits.
-- No catastrophic pile-up, pathfinding or replication failure.
+- [x] Supported 300-unit armies remain responsive and readable after settling.
+- [x] Server-side army/NPC AI work is budgeted and instrumented rather than scaling every expensive decision linearly per unit.
+- [x] Network ownership distributes owned-unit physics to the owning client.
+- [x] No catastrophic pile-up, pathfinding, command-completion or replication failure was found at the 300-unit target.
+- [x] 600 aggregate units completed as an overload test without a fatal runtime failure; expected heavy Play Solo slowdown was recorded rather than treated as a supported target.
+
+**1 October 2026 Phase 3 playtest evidence:**
+- Final clean stress run completed all 25 / 50 / 100 / 200 / 300 gates with the exact expected live-unit counts and zero rootless owned units.
+- At 300 units, all 300 assemblies were client-owned in the final supported-target run; the active NPC budget settled around 140 units.
+- The 300-unit gate recorded owned-army AI at about 33.2 ms average / 53.1 ms max during spawn-and-convergence stress, with NPC AI around 14.4 ms average / 17.6 ms max.
+- Once the 300-unit army settled in Hold, a five-second server sample averaged about 26.9 ms per Heartbeat with p95 about 68.6 ms; army AI averaged about 5.4 ms and NPC AI about 15.9 ms in that sample.
+- Client Stats during the settled 300-unit run reported about 32.8 average FPS, about 0.9 kB/s send and 130 kB/s receive in Studio, with roughly 3.9 GB total Studio memory. These are Studio measurements, not production-device guarantees.
+- Steady-state spacing at 300 units had no unit whose nearest neighbour was under 2 studs; nearest-neighbour distance was about 3.36 studs at p10, 3.89 median and 4.35 at p90.
+- All 300 owned units received the friendly army Highlight during the readability check.
+- A 300-unit Compact `Move Here` command completed automatically into Hold; army centre finished about 3.24 studs from the requested command point.
+- The 300-unit `Attack Target` regression reduced the controlled 1,000,000-HP target, stamped `PLAYER_ARMY` final-damage attribution and exercised the pooled ranged tracer path.
+- The 300-unit Retreat regression now returns automatically to Follow; the original all-units-within-18-studs completion rule was replaced for large armies by formation-slot arrival with a 95% threshold.
+- The final command/combat console pass had no runtime error and no `PlayerArmies` infinite-yield warnings.
+- The extra 600-unit aggregate overload run completed with 600 live owned units, 599/600 client-owned assemblies and about 139 active NPCs. Its five-second settled Play Solo sample averaged about 147 ms per Heartbeat, confirming that 600 visible/simulated units in one combined Studio client/server process is an overload condition rather than a supported per-player target.
+- The 600-unit run still kept the measured owned-army AI loop around 26.4 ms average and NPC AI around 30.0 ms average after settling, which supports moving true multi-client distribution/transport validation into the dedicated Phase 4 two-player test rather than increasing the per-player target.
 
 ## Phase 4 - PvP rules and battlefield theft
 

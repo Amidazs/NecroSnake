@@ -1,13 +1,13 @@
 --!strict
 
-local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
-local TweenService = game:GetService("TweenService")
 
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local ArrowTracerPool = require(Shared:WaitForChild("ArrowTracerPool"))
 
 local NPCService = {}
 
@@ -25,6 +25,8 @@ local UNIT_TTL_SECONDS = 360
 -- Density / cap (scales with map size)
 local MIN_UNIT_CAP = 140
 local MAX_UNIT_CAP = 260
+local ARMY_PRESSURE_PER_OWNED_UNIT = 0.4
+local PRESSURE_DESPAWN_DISTANCE = 220
 
 -- Rough density target: 1 NPC per X studs^2 (lower = denser)
 local AREA_PER_NPC = 12000
@@ -42,6 +44,10 @@ local SPAWN_BURST_MAX_GROUPS = 3
 
 local CLEANUP_INTERVAL_SECONDS = 2.0
 local AI_TICK_SECONDS = 0.5
+local NPC_TARGET_BUCKETS = 4
+local DISTANT_GROUP_DISTANCE = 250
+local DISTANT_GROUP_UPDATE_CYCLES = 4
+local METRIC_REPORT_SECONDS = 2
 
 -- Biomes
 local BIOMES_FOLDER_NAME = "Biomes"
@@ -155,6 +161,15 @@ local group_folder: Folder? = nil
 
 local groups: { [string]: GroupState } = {}
 local target_state_by_unit: { [Model]: TargetState } = {}
+local group_center_cache: { [string]: Vector3 } = {}
+local group_strength_cache: { [string]: number } = {}
+
+local npc_ai_cycle = 0
+local npc_spawn_serial = 0
+local metric_total_ms = 0
+local metric_samples = 0
+local metric_max_ms = 0
+local next_metric_publish = 0
 
 local function now(): number
 	return os.clock()
@@ -410,35 +425,11 @@ local function get_preferred_range(model: Model): number
 	return clamp(attack_range * 0.75, 8, attack_range - 1)
 end
 
-local function emit_arrow_tracer(from_root: BasePart, target_root: BasePart)
-	local start_pos = from_root.Position + Vector3.new(0, 1.5, 0)
-	local end_pos = target_root.Position + Vector3.new(0, 1.2, 0)
-	local delta = end_pos - start_pos
-	if delta.Magnitude < 0.1 then
-		return
-	end
-
-	local arrow = Instance.new("Part")
-	arrow.Name = "NecroArrowTracer"
-	arrow.Size = Vector3.new(0.12, 0.12, 1.7)
-	arrow.Color = Color3.fromRGB(117, 79, 44)
-	arrow.Material = Enum.Material.Wood
-	arrow.Anchored = true
-	arrow.CanCollide = false
-	arrow.CanTouch = false
-	arrow.CanQuery = false
-	arrow.CastShadow = false
-	arrow.CFrame = CFrame.lookAt(start_pos, end_pos)
-	arrow.Parent = Workspace
-
-	local travel_time = clamp(delta.Magnitude / 85, 0.12, 0.42)
-	local tween = TweenService:Create(
-		arrow,
-		TweenInfo.new(travel_time, Enum.EasingStyle.Linear),
-		{ CFrame = CFrame.lookAt(end_pos, end_pos + delta.Unit) }
-	)
-	tween:Play()
-	Debris:AddItem(arrow, travel_time + 0.08)
+local function emit_arrow_tracer(
+	from_root: BasePart,
+	target_root: BasePart
+)
+	ArrowTracerPool.emit(from_root, target_root)
 end
 
 local function compute_damage_after_defense(target_model: Model, raw_damage: number): number
@@ -475,31 +466,42 @@ local function get_model_dps_estimate(model: Model): number
 end
 
 local function compute_group_strength(g: GroupState): number
+	local cached = group_strength_cache[g.id]
+	if cached then
+		return cached
+	end
+
 	local sum = 0
-	for _, u in ipairs(g.units) do
-		if u.humanoid.Health > 0 and u.model.Parent ~= nil then
-			sum += u.power
+	for _, unit in ipairs(g.units) do
+		if unit.humanoid.Health > 0 and unit.model.Parent ~= nil then
+			sum += unit.power
 		end
 	end
+	group_strength_cache[g.id] = sum
 	return sum
 end
 
 local function get_group_center(g: GroupState): Vector3
-	local sum = Vector3.new(0, 0, 0)
-	local count = 0
+	local cached = group_center_cache[g.id]
+	if cached then
+		return cached
+	end
 
-	for _, u in ipairs(g.units) do
-		if u.humanoid.Health > 0 and u.model.Parent ~= nil then
-			sum += u.root.Position
+	local sum = Vector3.zero
+	local count = 0
+	for _, unit in ipairs(g.units) do
+		if unit.humanoid.Health > 0 and unit.model.Parent ~= nil then
+			sum += unit.root.Position
 			count += 1
 		end
 	end
 
-	if count == 0 then
-		return g.leader.root.Position
+	local center = g.leader.root.Position
+	if count > 0 then
+		center = sum / count
 	end
-
-	return sum / count
+	group_center_cache[g.id] = center
+	return center
 end
 
 local function move_unit_to(unit: NpcUnit, goal: Vector3)
@@ -627,7 +629,8 @@ local function get_or_create_target_state(npc_model: Model): TargetState
 		target_model = nil,
 		target_root = nil,
 		target_humanoid = nil,
-		next_retarget_time = 0,
+		next_retarget_time = now()
+			+ (math.random() * TARGET_REEVAL_COOLDOWN),
 	}
 
 	target_state_by_unit[npc_model] = created
@@ -1141,63 +1144,111 @@ local function reacquire_target_for_npc(
 	return best_model, best_root, best_hum
 end
 
-local function update_target_state(own_group: GroupState, npc_unit: NpcUnit)
-	local state = get_or_create_target_state(npc_unit.model)
-	local t = now()
+local function should_refresh_npc_target(model: Model): boolean
+	local bucket = model:GetAttribute("NPCTargetBucket")
+	local stable_bucket = typeof(bucket) == "number"
+		and math.floor(bucket)
+		or 0
+	return stable_bucket == (npc_ai_cycle % NPC_TARGET_BUCKETS)
+end
 
-	if own_group.is_fleeing then
-		-- While fleeing, do not chase targets.
-		-- But counterattack player army units that are very close.
+local function get_group_player_distance(
+	g: GroupState
+): number
+	local center = get_group_center(g)
+	local nearest_distance = math.huge
 
-		local npc_pos = npc_unit.root.Position
-
-		local a_model, a_root, a_hum = find_closest_player_army_unit_in_range(
-			npc_pos,
-			FLEE_COUNTERATTACK_RANGE
-		)
-
-		if a_model and a_root and a_hum then
-			state.target_model = a_model
-			state.target_root = a_root
-			state.target_humanoid = a_hum
-		else
-			state.target_model = nil
-			state.target_root = nil
-			state.target_humanoid = nil
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+		local root = character and get_root(character) or nil
+		if root then
+			nearest_distance = math.min(
+				nearest_distance,
+				(root.Position - center).Magnitude
+			)
 		end
+	end
 
-		state.next_retarget_time = t + TARGET_REEVAL_COOLDOWN
+	return nearest_distance
+end
+
+local function is_group_distant_from_players(g: GroupState): boolean
+	return get_group_player_distance(g) > DISTANT_GROUP_DISTANCE
+end
+
+local function should_update_distant_group(g: GroupState): boolean
+	local bucket = g.leader.model:GetAttribute("NPCTargetBucket")
+	local stable_bucket = typeof(bucket) == "number"
+		and math.floor(bucket)
+		or 0
+	return (npc_ai_cycle + stable_bucket)
+		% DISTANT_GROUP_UPDATE_CYCLES == 0
+end
+
+local function clear_target_state(state: TargetState)
+	state.target_model = nil
+	state.target_root = nil
+	state.target_humanoid = nil
+end
+
+local function update_target_state(
+	own_group: GroupState,
+	npc_unit: NpcUnit,
+	allow_periodic_retarget: boolean
+)
+	local state = get_or_create_target_state(npc_unit.model)
+	local current_time = now()
+	local bucket_ready = should_refresh_npc_target(npc_unit.model)
+
+	if state.target_model
+		and not is_alive_model(state.target_model)
+	then
+		clear_target_state(state)
+		state.next_retarget_time = math.min(
+			state.next_retarget_time,
+			current_time
+		)
+	end
+
+	if state.target_root
+		and (
+			state.target_root.Position - npc_unit.root.Position
+		).Magnitude > TARGET_ACQUIRE_RANGE
+	then
+		clear_target_state(state)
+		state.next_retarget_time = math.min(
+			state.next_retarget_time,
+			current_time
+		)
+	end
+
+	if not allow_periodic_retarget
+		or not bucket_ready
+		or current_time < state.next_retarget_time
+	then
 		return
 	end
 
-	local must_retarget = false
-
-	if t >= state.next_retarget_time then
-		must_retarget = true
-	end
-
-	if not is_alive_model(state.target_model) then
-		must_retarget = true
-	end
-
-	if state.target_root then
-		local d = (state.target_root.Position - npc_unit.root.Position).Magnitude
-		if d > TARGET_ACQUIRE_RANGE then
-			must_retarget = true
-		end
-	end
-
-	if must_retarget then
+	if own_group.is_fleeing then
+		local model, root, humanoid =
+			find_closest_player_army_unit_in_range(
+				npc_unit.root.Position,
+				FLEE_COUNTERATTACK_RANGE
+			)
+		state.target_model = model
+		state.target_root = root
+		state.target_humanoid = humanoid
+	else
 		local new_model, new_root, new_hum = reacquire_target_for_npc(
 			own_group.id,
 			npc_unit
 		)
-
 		state.target_model = new_model
 		state.target_root = new_root
 		state.target_humanoid = new_hum
-		state.next_retarget_time = t + TARGET_REEVAL_COOLDOWN
 	end
+
+	state.next_retarget_time = current_time + TARGET_REEVAL_COOLDOWN
 end
 
 -- ===== Spawn helpers =====
@@ -1259,16 +1310,39 @@ local function get_terrain_bounds_xz(): (number, number, number, number)
 	return FALLBACK_MIN_X, FALLBACK_MAX_X, FALLBACK_MIN_Z, FALLBACK_MAX_Z
 end
 
+local function count_deployed_army_units(): number
+	if not army_service or not army_service.get_army_units then
+		return 0
+	end
+
+	local total = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		total += #army_service.get_army_units(player)
+	end
+	return total
+end
+
 local function compute_desired_unit_cap(): number
 	local min_x, max_x, min_z, max_z = get_terrain_bounds_xz()
 	local size_x = math.max(1, (max_x - min_x))
 	local size_z = math.max(1, (max_z - min_z))
 	local area = size_x * size_z
 
-	local desired = math.floor(area / AREA_PER_NPC)
-	desired = math.clamp(desired, MIN_UNIT_CAP, MAX_UNIT_CAP)
+	local base_cap = math.clamp(
+		math.floor(area / AREA_PER_NPC),
+		MIN_UNIT_CAP,
+		MAX_UNIT_CAP
+	)
+	local owned_units = count_deployed_army_units()
+	local pressure = math.floor(
+		owned_units * ARMY_PRESSURE_PER_OWNED_UNIT
+	)
 
-	return desired
+	return math.clamp(
+		base_cap - pressure,
+		MIN_UNIT_CAP,
+		base_cap
+	)
 end
 
 
@@ -1388,6 +1462,57 @@ local function count_total_units(): number
 	return total
 end
 
+local function destroy_live_group(id: string, g: GroupState)
+	for _, unit in ipairs(g.units) do
+		target_state_by_unit[unit.model] = nil
+		boss_phase_by_model[unit.model] = nil
+		if unit.model.Parent ~= nil then
+			unit.model:Destroy()
+		end
+	end
+
+	if g.folder.Parent ~= nil then
+		g.folder:Destroy()
+	end
+	groups[id] = nil
+	group_center_cache[id] = nil
+	group_strength_cache[id] = nil
+end
+
+local function trim_distant_groups_to_cap()
+	local desired_cap = compute_desired_unit_cap()
+	local total_units = count_total_units()
+	if total_units <= desired_cap then
+		return
+	end
+
+	local candidates = {}
+	for id, group in pairs(groups) do
+		local distance = get_group_player_distance(group)
+		if distance >= PRESSURE_DESPAWN_DISTANCE then
+			table.insert(candidates, {
+				id = id,
+				group = group,
+				distance = distance,
+			})
+		end
+	end
+
+	table.sort(candidates, function(a, b)
+		return a.distance > b.distance
+	end)
+
+	for _, candidate in ipairs(candidates) do
+		if total_units <= desired_cap then
+			break
+		end
+		local group = candidate.group
+		local group_size = #group.units
+		destroy_live_group(candidate.id, group)
+		total_units -= group_size
+	end
+end
+
 local function pick_spawn_template(templates: { string }): string
 	-- use weighted template selection when available.
 	if model_library_service and model_library_service.pick_spawn_template then
@@ -1431,6 +1556,7 @@ local function spawn_group()
 
 	local count = math.random(GROUP_SIZE_MIN, GROUP_SIZE_MAX)
 	for _ = 1, count do
+		npc_spawn_serial += 1
 		local template_name = pick_spawn_template(templates)
 
 		local jitter = Vector3.new(
@@ -1457,11 +1583,18 @@ local function spawn_group()
 
 			model:SetAttribute("SpawnTime", now())
 			model:SetAttribute("NPCGroupId", id)
-
+			model:SetAttribute(
+				"NPCTargetBucket",
+				npc_spawn_serial % NPC_TARGET_BUCKETS
+			)
 
 			local root = get_root(model)
 			local hum = get_humanoid(model)
 			if root and hum then
+				pcall(function()
+					root:SetNetworkOwnershipAuto()
+				end)
+
 				local unit: NpcUnit = {
 					model = model,
 					root = root,
@@ -1550,24 +1683,37 @@ function NPCService.start()
 	cleanup_task = task.spawn(function()
 		while running do
 			prune_dead_and_expired()
+			table.clear(group_center_cache)
+			table.clear(group_strength_cache)
+			trim_distant_groups_to_cap()
 			task.wait(CLEANUP_INTERVAL_SECONDS)
 		end
 	end)
 
 	ai_task = task.spawn(function()
 		while running do
-			for _, g in pairs(groups) do
-				update_flee_state(g)
+			local tick_started = now()
+			npc_ai_cycle += 1
+			table.clear(group_center_cache)
+			table.clear(group_strength_cache)
 
-				local goal = decide_goal_for_group(g)
-				apply_formation(g, goal)
+			for _, g in pairs(groups) do
+				local is_distant = is_group_distant_from_players(g)
+				local full_group_update = not is_distant
+					or should_update_distant_group(g)
+
+				if full_group_update then
+					update_flee_state(g)
+					local goal = decide_goal_for_group(g)
+					apply_formation(g, goal)
+				end
 
 				for i, npc_unit in ipairs(g.units) do
 					if npc_unit.humanoid.Health <= 0 then
 						continue
 					end
 
-					update_target_state(g, npc_unit)
+					update_target_state(g, npc_unit, full_group_update)
 
 					local state = get_or_create_target_state(npc_unit.model)
 					if state.target_model and state.target_root and state.target_humanoid then
@@ -1584,7 +1730,9 @@ function NPCService.start()
 						-- 1) MOVEMENT
 						-- If fleeing: do NOT override movement here (formation already handles flee).
 						-- Bosses never flee (enforced in update_flee_state), so bosses can still move/charge.
-						if not g.is_fleeing then
+						if not g.is_fleeing
+							and (not is_distant or full_group_update)
+						then
 							local move_goal = leashed_target_pos
 
 							if is_boss then
@@ -1644,6 +1792,41 @@ function NPCService.start()
 						end
 					end
 				end
+			end
+
+			local elapsed_ms = (now() - tick_started) * 1000
+			metric_total_ms += elapsed_ms
+			metric_samples += 1
+			metric_max_ms = math.max(metric_max_ms, elapsed_ms)
+
+			local current_time = now()
+			if current_time >= next_metric_publish then
+				local average_ms = metric_samples > 0
+					and metric_total_ms / metric_samples
+					or 0
+				Workspace:SetAttribute("NPCAITickAverageMs", average_ms)
+				Workspace:SetAttribute("NPCAITickMaxMs", metric_max_ms)
+				Workspace:SetAttribute("NPCAIUnitCount", count_total_units())
+				Workspace:SetAttribute(
+					"NPCEffectiveUnitCap",
+					compute_desired_unit_cap()
+				)
+				Workspace:SetAttribute(
+					"OwnedArmyUnitCount",
+					count_deployed_army_units()
+				)
+
+				local group_count = 0
+				for _ in pairs(groups) do
+					group_count += 1
+				end
+				Workspace:SetAttribute("NPCGroupCount", group_count)
+
+				metric_total_ms = 0
+				metric_samples = 0
+				metric_max_ms = 0
+				next_metric_publish = current_time
+					+ METRIC_REPORT_SECONDS
 			end
 
 			task.wait(AI_TICK_SECONDS)
