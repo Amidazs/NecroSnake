@@ -70,5 +70,9 @@ function Remotes.army_command(): RemoteEvent
 	return Remotes.get_or_create_event("ArmyCommand")
 end
 
+function Remotes.formation_profile(): RemoteEvent
+	return Remotes.get_or_create_event("FormationProfile")
+end
+
 
 return Remotes

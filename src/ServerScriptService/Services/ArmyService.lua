@@ -16,6 +16,7 @@ local FALLBACK_MAX_Z = 512
 local ArmyService = {}
 
 local model_library_service = nil :: any
+local formation_profile_service = nil :: any
 local did_init = false
 
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
@@ -363,13 +364,25 @@ local function spawn_one_unit(
 	-- Mark as player army so AI can treat speed + targeting differently.
 	model:SetAttribute("IsPlayerArmy", true)
 	model:SetAttribute("ArmyOwnerUserId", player.UserId)
-	if model:GetAttribute("Cohort") == nil then
-		local default_cohort = model:GetAttribute("DefaultCohort")
-		if typeof(default_cohort) ~= "string" or default_cohort == "" then
-			default_cohort = "SecondLine"
-		end
-		model:SetAttribute("Cohort", default_cohort)
+
+	local cohort = nil
+	local template_identity = model:GetAttribute(ATTR_TEMPLATE_NAME)
+	if formation_profile_service
+		and formation_profile_service.get_cohort_for_template
+		and typeof(template_identity) == "string"
+	then
+		cohort = formation_profile_service.get_cohort_for_template(
+			player,
+			template_identity
+		)
 	end
+	if typeof(cohort) ~= "string" or cohort == "" then
+		cohort = model:GetAttribute("DefaultCohort")
+	end
+	if typeof(cohort) ~= "string" or cohort == "" then
+		cohort = "SecondLine"
+	end
+	model:SetAttribute("Cohort", cohort)
 
 	spawn_index_by_user_id[player.UserId] = (spawn_index_by_user_id[player.UserId] or 0)
 		+ 1
@@ -550,8 +563,9 @@ function ArmyService.banish_unit(player: Player, model: Model): (boolean, string
 	return true, "Unit banished. Command Capacity freed."
 end
 
-function ArmyService.init(model_library)
+function ArmyService.init(model_library, formation_profile_service_ref: any?)
 	model_library_service = model_library
+	formation_profile_service = formation_profile_service_ref
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)

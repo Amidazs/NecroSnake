@@ -38,6 +38,10 @@ local BackpackService = require(
 	ServicesFolder:WaitForChild("BackpackService")
 )
 
+local FormationProfileService = require(
+	ServicesFolder:WaitForChild("FormationProfileService")
+)
+
 local TeleportService = require(
 	ServicesFolder:WaitForChild("TeleportService")
 )
@@ -99,6 +103,7 @@ local function main()
 	-- Remotes used by active necromancy / Banish
 	Remotes.necromancy_result()
 	Remotes.banish_request()
+	Remotes.formation_profile()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")
@@ -107,7 +112,9 @@ local function main()
 	BackpackService.start()
 
 	ModelLibraryService.init()
-	ArmyService.init(ModelLibraryService)
+	FormationProfileService.init(ModelLibraryService)
+	FormationProfileService.start()
+	ArmyService.init(ModelLibraryService, FormationProfileService)
 	ArmyAIService.init(ArmyService)
 	ArmyRegenService.init(ArmyService)
 

@@ -224,15 +224,15 @@ Work:
 
 ## Phase 2 - Tactical army control and formations
 
-**Status:** IN PROGRESS - whole-army commands + cohort formation foundation GREEN on 1 October 2026.
+**Status:** IN PROGRESS - whole-army commands + cohort formation + Base Formation Editor GREEN on 1 October 2026.
 
 **Goal:** make the player feel like an army commander rather than a pet owner.
 
 Work:
 - [x] Introduce cohorts/formations.
 - [x] Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
-- [ ] Formation Editor in Base.
-- [ ] Save formation assignments.
+- [x] Formation Editor in Base.
+- [x] Save template -> cohort formation assignments using a versioned formation profile DataStore; unpublished Studio uses a session-only fallback.
 - [x] Follow/Regroup.
 - [x] Move Here.
 - [x] Hold Position.
@@ -260,8 +260,15 @@ Work:
 - The same mixed formation preserved those bands after a Move Here command; on arrival the army automatically returned to Hold.
 - Follow test after moving the Necromancer kept Flanks about 11.4 studs to the side, Second Line about 7.1 studs ahead, and Rear Guard about 13.5 studs behind.
 - Formation UI visual QA confirmed the panel is readable above the command bar and the tactical order is fixed as Frontline -> Second Line -> Ranged -> Flanks -> Rear Guard -> Personal Guard.
+- Base Formation Editor is available only inside the Sanctum/SafeZoneRegion; the same template-edit request is server-rejected from the Arena.
+- Base editor lists every current ModelLibrary template, its catalogue default cohort, and any saved override; Reset returns a template to its catalogue default.
+- Template rule test changed `Skeleton -> Ranged` in the Sanctum and immediately updated all three existing Skeletons to Ranged.
+- Respawn inheritance test then cleared the old army and spawned new starter Skeletons (ArmyUnitIds 4-6); all three inherited Ranged from the Base profile rather than the catalogue Second Line default.
+- Arena edit test attempted `Skeleton -> Frontline` and was rejected with `Formation defaults can only be edited in the Sanctum`; the live units remained Ranged.
+- Unpublished Studio safely uses a session-only formation-profile fallback because Roblox DataStore access requires a published place; published servers use `NecroSnakeFormationProfile_v1` and save template -> cohort overrides.
+- Test overrides were reset before saving the canonical place; live Skeletons returned to the catalogue `SecondLine` default.
 
-**Next Phase 2 slice:** build the Base Formation Editor and save template/cohort assignments, then add combat preset switching and ranged/support-specific cohort behaviours.
+**Next Phase 2 slice:** add combat formation preset switching, ranged/support-specific cohort behaviours, then improve local spacing/avoidance before Phase 2 closeout.
 
 **Acceptance:**
 - Player can build a shield-front / ranged-rear formation.
