@@ -337,6 +337,7 @@ Stress gates:
 - The 300-unit `Attack Target` regression reduced the controlled 1,000,000-HP target, stamped `PLAYER_ARMY` final-damage attribution and exercised the pooled ranged tracer path.
 - The 300-unit Retreat regression now returns automatically to Follow; the original all-units-within-18-studs completion rule was replaced for large armies by formation-slot arrival with a 95% threshold.
 - The final command/combat console pass had no runtime error and no `PlayerArmies` infinite-yield warnings.
+- The saved canonical `place.rbxl` was then cold-opened from disk; the Phase 3 modules/LOD scripts were present, the temporary stress harness was absent, the 3-unit starter army spawned, active NPC factions came online, and the fresh runtime console remained error-free.
 - The extra 600-unit aggregate overload run completed with 600 live owned units, 599/600 client-owned assemblies and about 139 active NPCs. Its five-second settled Play Solo sample averaged about 147 ms per Heartbeat, confirming that 600 visible/simulated units in one combined Studio client/server process is an overload condition rather than a supported per-player target.
 - The 600-unit run still kept the measured owned-army AI loop around 26.4 ms average and NPC AI around 30.0 ms average after settling, which supports moving true multi-client distribution/transport validation into the dedicated Phase 4 two-player test rather than increasing the per-player target.
 
