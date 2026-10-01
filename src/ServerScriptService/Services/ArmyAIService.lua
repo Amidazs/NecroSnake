@@ -47,6 +47,26 @@ local AI_TICK_SECONDS = 0.35
 local RING_SPACING = 7
 local MIN_RING_RADIUS = 8
 local MAX_UNITS_PER_RING = 10
+local COHORT_SPACING = 5
+local COHORT_ROW_SPACING = 4
+
+local COHORT_ORDER = {
+	"Frontline",
+	"SecondLine",
+	"Ranged",
+	"Flanks",
+	"RearGuard",
+	"PersonalGuard",
+}
+
+local VALID_COHORTS: { [string]: boolean } = {
+	Frontline = true,
+	SecondLine = true,
+	Ranged = true,
+	Flanks = true,
+	RearGuard = true,
+	PersonalGuard = true,
+}
 
 -- Movement smoothing:
 local MOVE_REISSUE_SECONDS = 0.45
@@ -85,6 +105,7 @@ type ArmyCommandState = {
 	mode: string,
 	position: Vector3?,
 	target: Model?,
+	facing: Vector3?,
 }
 
 local state_by_unit: { [Model]: UnitState } = {}
@@ -461,6 +482,102 @@ local function compute_formation_slots(center: Vector3, count: number): { Vector
 	return slots
 end
 
+local function get_unit_cohort(unit_model: Model): string
+	local cohort = unit_model:GetAttribute("Cohort")
+	if typeof(cohort) == "string" and VALID_COHORTS[cohort] then
+		return cohort
+	end
+
+	local fallback = unit_model:GetAttribute("DefaultCohort")
+	if typeof(fallback) ~= "string" or not VALID_COHORTS[fallback] then
+		fallback = "SecondLine"
+	end
+	unit_model:SetAttribute("Cohort", fallback)
+	return fallback
+end
+
+local function make_anchor_cframe(position: Vector3, facing: Vector3): CFrame
+	local flat = Vector3.new(facing.X, 0, facing.Z)
+	if flat.Magnitude < 0.01 then
+		flat = Vector3.new(0, 0, -1)
+	end
+	return CFrame.lookAt(position, position + flat.Unit)
+end
+
+local function compute_band_slot(
+	anchor: CFrame,
+	index: number,
+	count: number,
+	base_z: number,
+	max_per_row: number
+): Vector3
+	local row = math.floor((index - 1) / max_per_row)
+	local first_in_row = row * max_per_row
+	local remaining = count - first_in_row
+	local row_count = math.min(max_per_row, remaining)
+	local position_in_row = index - first_in_row
+	local x = (position_in_row - ((row_count + 1) * 0.5)) * COHORT_SPACING
+	local z = base_z + (row * COHORT_ROW_SPACING)
+	return anchor:PointToWorldSpace(Vector3.new(x, 0, z))
+end
+
+local function compute_cohort_formation_slots(
+	anchor: CFrame,
+	units: { Model }
+): { Vector3 }
+	local groups: { [string]: { number } } = {}
+	for _, cohort in ipairs(COHORT_ORDER) do
+		groups[cohort] = {}
+	end
+
+	for index, unit_model in ipairs(units) do
+		local cohort = get_unit_cohort(unit_model)
+		table.insert(groups[cohort], index)
+	end
+
+	for _, cohort in ipairs(COHORT_ORDER) do
+		table.sort(groups[cohort], function(a, b)
+			local a_id = units[a]:GetAttribute("ArmyUnitId")
+			local b_id = units[b]:GetAttribute("ArmyUnitId")
+			local a_num = typeof(a_id) == "number" and a_id or a
+			local b_num = typeof(b_id) == "number" and b_id or b
+			return a_num < b_num
+		end)
+	end
+
+	local slots: { Vector3 } = table.create(#units)
+
+	local function assign_band(cohort: string, base_z: number, max_per_row: number)
+		local indices = groups[cohort]
+		for local_index, unit_index in ipairs(indices) do
+			slots[unit_index] = compute_band_slot(
+				anchor,
+				local_index,
+				#indices,
+				base_z,
+				max_per_row
+			)
+		end
+	end
+
+	assign_band("Frontline", -14, 6)
+	assign_band("SecondLine", -7, 6)
+	assign_band("Ranged", 7, 7)
+	assign_band("RearGuard", 14, 6)
+	assign_band("PersonalGuard", 1.5, 4)
+
+	local flank_indices = groups.Flanks
+	for local_index, unit_index in ipairs(flank_indices) do
+		local pair_index = math.floor((local_index - 1) / 2)
+		local side = local_index % 2 == 1 and -1 or 1
+		local x = side * (11 + (pair_index * 3.5))
+		local z = -3 + ((pair_index % 3) * 4)
+		slots[unit_index] = anchor:PointToWorldSpace(Vector3.new(x, 0, z))
+	end
+
+	return slots
+end
+
 local function move_unit_smooth(humanoid: Humanoid, s: UnitState, goal: Vector3)
 	local t = now()
 
@@ -519,6 +636,7 @@ local function get_command_state(player: Player): ArmyCommandState
 		mode = "FOLLOW",
 		position = nil,
 		target = nil,
+		facing = nil,
 	}
 	command_by_user_id[player.UserId] = created
 	player:SetAttribute("ArmyCommandMode", "FOLLOW")
@@ -545,10 +663,24 @@ local function set_command(
 	target: Model?,
 	message: string
 )
+	local facing: Vector3? = nil
+	if position then
+		local character = player.Character
+		local root = character and get_root(character)
+		if root then
+			local look = root.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			if flat.Magnitude > 0.01 then
+				facing = flat.Unit
+			end
+		end
+	end
+
 	command_by_user_id[player.UserId] = {
 		mode = mode,
 		position = position,
 		target = target,
+		facing = facing,
 	}
 	player:SetAttribute("ArmyCommandMode", mode)
 	send_command_feedback(player, mode, message)
@@ -681,6 +813,41 @@ local function handle_command_request(
 		return
 	end
 
+	if action == "SET_COHORT" then
+		if typeof(payload) ~= "table" then
+			return
+		end
+
+		local target = payload.target
+		local cohort = payload.cohort
+		if typeof(target) ~= "Instance"
+			or not target:IsA("Model")
+			or typeof(cohort) ~= "string"
+			or not VALID_COHORTS[cohort]
+		then
+			return
+		end
+
+		if target:GetAttribute("ArmyOwnerUserId") ~= player.UserId
+			or not is_alive(target)
+		then
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"Aim at one of your living undead."
+			)
+			return
+		end
+
+		target:SetAttribute("Cohort", cohort)
+		send_command_feedback(
+			player,
+			get_command_state(player).mode,
+			("%s assigned to %s."):format(target.Name, cohort)
+		)
+		return
+	end
+
 	if action == "ATTACK" then
 		if typeof(payload) ~= "Instance" or not payload:IsA("Model") then
 			send_command_feedback(player, get_command_state(player).mode, "Choose an enemy target.")
@@ -711,6 +878,7 @@ local function tick_commanded_mode(
 	player: Player,
 	alive_units: { Model },
 	player_pos: Vector3,
+	player_cframe: CFrame,
 	player_speed: number
 ): boolean
 	local command = get_command_state(player)
@@ -726,7 +894,9 @@ local function tick_commanded_mode(
 
 	if command.mode == "MOVE" or command.mode == "HOLD" then
 		local center = command.position or player_pos
-		local slots = compute_formation_slots(center, #alive_units)
+		local facing = command.facing or player_cframe.LookVector
+		local anchor = make_anchor_cframe(center, facing)
+		local slots = compute_cohort_formation_slots(anchor, alive_units)
 		local all_arrived = true
 
 		for i, unit_model in ipairs(alive_units) do
@@ -763,7 +933,7 @@ local function tick_commanded_mode(
 	end
 
 	if command.mode == "RETREAT" then
-		local slots = compute_formation_slots(player_pos, #alive_units)
+		local slots = compute_cohort_formation_slots(player_cframe, alive_units)
 		local all_close = true
 		local retreat_speed = clamp(
 			player_speed * RETREAT_SPEED_MULTIPLIER,
@@ -899,6 +1069,7 @@ local function tick_player(player: Player)
 		player,
 		alive_units,
 		player_pos,
+		hrp.CFrame,
 		player_speed
 	) then
 		return
@@ -910,7 +1081,7 @@ local function tick_player(player: Player)
 		UNIT_SPEED_MAX
 	)
 
-	local slots = compute_formation_slots(player_pos, #alive_units)
+	local slots = compute_cohort_formation_slots(hrp.CFrame, alive_units)
 	local candidates = get_enemy_candidates_near_player(player, player_pos)
 
 	for i, unit_model in ipairs(alive_units) do

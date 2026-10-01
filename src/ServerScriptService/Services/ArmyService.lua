@@ -363,6 +363,13 @@ local function spawn_one_unit(
 	-- Mark as player army so AI can treat speed + targeting differently.
 	model:SetAttribute("IsPlayerArmy", true)
 	model:SetAttribute("ArmyOwnerUserId", player.UserId)
+	if model:GetAttribute("Cohort") == nil then
+		local default_cohort = model:GetAttribute("DefaultCohort")
+		if typeof(default_cohort) ~= "string" or default_cohort == "" then
+			default_cohort = "SecondLine"
+		end
+		model:SetAttribute("Cohort", default_cohort)
+	end
 
 	spawn_index_by_user_id[player.UserId] = (spawn_index_by_user_id[player.UserId] or 0)
 		+ 1

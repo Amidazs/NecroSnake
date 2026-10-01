@@ -224,13 +224,13 @@ Work:
 
 ## Phase 2 - Tactical army control and formations
 
-**Status:** IN PROGRESS - whole-army command foundation GREEN on 1 October 2026.
+**Status:** IN PROGRESS - whole-army commands + cohort formation foundation GREEN on 1 October 2026.
 
 **Goal:** make the player feel like an army commander rather than a pet owner.
 
 Work:
-- [ ] Introduce cohorts/formations.
-- [ ] Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
+- [x] Introduce cohorts/formations.
+- [x] Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
 - [ ] Formation Editor in Base.
 - [ ] Save formation assignments.
 - [x] Follow/Regroup.
@@ -239,7 +239,7 @@ Work:
 - [x] Attack Target.
 - [x] Retreat.
 - [ ] Formation switching in combat.
-- [ ] Per-cohort behaviour where useful.
+- [x] Per-cohort positioning for Follow / Move Here / Hold / Retreat; combat-specific cohort behaviour remains to be expanded as ranged/support unit types arrive.
 - [ ] Better spacing, local avoidance and anti-pile-up.
 
 **Command foundation test evidence:**
@@ -252,6 +252,16 @@ Work:
 - Visible Banish button was repositioned above the Veil Gate panel after visual QA; the `B` shortcut remains available. The current-build Banish path removed the aimed owned unit, updated Command Capacity from 3/5 to 2/5, and returned the correct success feedback.
 - Static-corpse regression test showed 0 studs movement and 0 velocity after death.
 - Real NPC final-blow test destroyed a 1-HP owned unit on the next NPC attack cycle with no entry created in `Workspace.Corpses`.
+
+**Cohort formation test evidence:**
+- Existing/newly owned units receive a `Cohort` attribute from their template default; tested defaults are Weak Skeleton/Skeleton -> Second Line, Skeleton Knight/Zombie Brute/Dark Knight -> Frontline, and Grave Baron/Crypt Warden -> Personal Guard.
+- Formation panel exposes all six cohorts with live counts and allows the player to aim at an owned living unit and reassign its cohort; the server validates ownership before applying the change.
+- Mixed-cohort Hold test placed Frontline about 12.6 studs ahead, Ranged about 8.4 studs behind, and Personal Guard about 2.3 studs close behind the anchor.
+- The same mixed formation preserved those bands after a Move Here command; on arrival the army automatically returned to Hold.
+- Follow test after moving the Necromancer kept Flanks about 11.4 studs to the side, Second Line about 7.1 studs ahead, and Rear Guard about 13.5 studs behind.
+- Formation UI visual QA confirmed the panel is readable above the command bar and the tactical order is fixed as Frontline -> Second Line -> Ranged -> Flanks -> Rear Guard -> Personal Guard.
+
+**Next Phase 2 slice:** build the Base Formation Editor and save template/cohort assignments, then add combat preset switching and ranged/support-specific cohort behaviours.
 
 **Acceptance:**
 - Player can build a shield-front / ranged-rear formation.

@@ -47,6 +47,7 @@ type StatDef = {
 	Weight: number,
 	CommandCost: number,
 	BaseScale: number?,
+	DefaultCohort: string?,
 
 	IsBoss: boolean?,
 	AlwaysRaise: boolean?,
@@ -72,6 +73,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 6, -- VERY common
 		CommandCost = 1,
 		BaseScale = 1.3,
+		DefaultCohort = "SecondLine",
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.90,
@@ -87,6 +89,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		WalkSpeed = 12,
 		Weight = 3, -- common
 		CommandCost = 1,
+		DefaultCohort = "SecondLine",
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.85, -- 0..1
@@ -103,6 +106,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 1,
 		CommandCost = 2,
 		BaseScale = 1.5,
+		DefaultCohort = "Frontline",
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.65, -- 0..1
@@ -119,6 +123,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 1,
 		CommandCost = 2,
 		BaseScale = 1.5,
+		DefaultCohort = "Frontline",
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.55, -- 0..1
@@ -135,6 +140,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 0.25, -- rare
 		CommandCost = 3,
 		BaseScale = 1.7,
+		DefaultCohort = "Frontline",
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.45, -- 0..1
@@ -151,6 +157,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 0.03, -- basically never random
 		CommandCost = 10,
 		BaseScale = 3,
+		DefaultCohort = "PersonalGuard",
 		IsBoss = true,
 		AlwaysRaise = false,
 		RaiseChance = 0.25,
@@ -165,6 +172,7 @@ local UNIT_STATS: { [string]: StatDef } = {
 		Weight = 0.03, -- basically never random
 		CommandCost = 10,
 		BaseScale = 3,
+		DefaultCohort = "PersonalGuard",
 		IsBoss = true,
 		AlwaysRaise = false,
 		RaiseChance = 0.25,
@@ -530,6 +538,7 @@ local function apply_stats_size_traits(
 		command_cost = math.max(command_cost + 1, math.ceil(command_cost * 1.5))
 	end
 	model:SetAttribute("CommandCost", command_cost)
+	model:SetAttribute("DefaultCohort", def.DefaultCohort or "SecondLine")
 
 	set_model_scale_to(model, scale)
 
