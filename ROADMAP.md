@@ -1,0 +1,442 @@
+# NecroSnake Roadmap
+
+**Roadmap baseline:** 1 October 2026  
+**Canonical recovery commit:** `d1beef14ee21e0cff523a5de473b91f68d63aa9f`  
+**Canonical Studio place:** `place.rbxl`
+
+## Vision
+
+NecroSnake is a third-person dark-fantasy Roblox action/army game with a slightly humorous edge. The player is a dangerous but vulnerable necromancer whose main strength comes from building, commanding, risking, losing, recovering, and evolving an undead army.
+
+The core loop is:
+
+**Enter Arena -> fight -> create corpses -> actively attempt raises -> grow/customise army -> fight players and factions -> extract valuable survivors -> preserve selected units in the Base -> clone/rebuild -> risk them again.**
+
+PvP is the centre of the game. PvE factions, bosses, collection, cloning, events, army customisation, and progression all exist to make PvP decisions more interesting.
+
+## Locked Game Rules
+
+### Camera and player role
+
+- Normal third-person Roblox camera.
+- The necromancer is personally dangerous but vulnerable.
+- The army is the player's main source of battlefield power.
+- A necromancer caught alone should be at serious risk.
+- The player eventually equips a maximum of **3 Necromancer skills**.
+- Skills can only be changed at the Base.
+- Level 1 begins with no equipped skill slots.
+- Skill slots unlock progressively; current target is approximately Level 10 / 25 / 50 for slots 1 / 2 / 3, subject to balance testing.
+
+### Army scale and capacity
+
+- The long-term fantasy is **several hundred individual undead**.
+- Units remain individual rather than being represented as stacks.
+- Necromancer level increases Command Capacity.
+- Early progression target: Level 1 ~= 5 capacity, Level 2 ~= 10, then continued growth toward several hundred capacity at high level.
+- Capacity is weighted.
+- Weak basic units may cost 1 capacity.
+- Armour, cavalry, giants, elites and bosses cost progressively more.
+- Only **1 major boss-class unit** may be deployed per army initially.
+- Rebirth will provide long-term progression without simply multiplying raw PvP damage.
+
+### Army control and formations
+
+- Army AI is not fully autonomous; the player must have meaningful tactical control.
+- Core battlefield commands: **Follow/Regroup, Move Here, Hold Position, Attack Target, Retreat**.
+- Players can organise units into tactical cohorts.
+- Initial cohort concepts: Frontline, Second Line, Ranged, Left Flank, Right Flank, Rear Guard and Personal Guard.
+- The Base contains a Formation Editor.
+- Example: Armoured Skeletons in front, spearmen behind them, archers behind those, cavalry on the flanks.
+- Formation presets should be switchable in combat without individual-unit micromanagement.
+
+### Corpses and raising
+
+- Raising is an active action, not automatic.
+- A corpse exists for approximately **20 seconds** by default.
+- The killer has exclusive raise rights for the first **6 seconds**.
+- After 6 seconds, any eligible necromancer may attempt to raise it.
+- At approximately 20 seconds, an unraised corpse/soul disappears.
+- Boss corpse lifetime may be longer if testing shows that is needed.
+- Raise attempts have a chance to fail.
+- Raise chance improves as the Necromancer progresses.
+- Raise speed and raise reach may also improve with progression.
+- Every corpse has a maximum of **3 failed Raise attempts total**, shared across all players.
+- On the third failed attempt, the corpse/soul collapses and disappears immediately.
+- A failed attempt does not automatically prevent a later attempt if failures remain and the corpse timer has not expired.
+- Failure state should be readable visually: stable -> damaged/unstable -> critical -> soul collapse.
+- Even high-level Necromancers should not reach guaranteed capture rates for the rarest elites/bosses.
+
+### Full army behaviour
+
+- A Raise cannot begin unless enough Command Capacity is available.
+- Trying to raise while full consumes **no Raise attempt**.
+- The UI must explain why the Raise cannot start and show required vs available Command Capacity.
+- The corpse timer continues while the player's army is full.
+- Players may **Banish** their own deployed undead to free capacity.
+- Banish permanently destroys that deployed unit.
+- Banished units leave no raisable corpse.
+- Units cannot be safely returned to the Base/backpack while remaining in the Arena.
+
+### PvP death and corpse theft
+
+- Arena PvP is always active.
+- Individual undead killed in PvP can become raisable corpses.
+- If the Necromancer dies, the player's entire deployed army is lost from their ownership.
+- Those dead/lost units may be raised by other Necromancers while their corpses remain valid.
+- A successfully raised enemy unit joins the new owner's army **immediately on the battlefield**.
+- PvP should visibly swing as players raise each other's casualties.
+- Extraction is the only reliable way to secure valuable battlefield gains.
+
+### Permanent collection and Soul Imprints
+
+- The Base contains Soul Imprinting / cloning machinery.
+- An extracted individual unit can be placed into a chamber as a **Master**.
+- A Master is preserved and can produce exact physical clones over time.
+- Cloning costs both **time and Soul Essence/resource**.
+- Production continues offline while resources are available.
+- Each cloning machine has a finite output/storage cap.
+- Base upgrades can increase machine count, capacity, output storage and/or efficiency.
+- A Master may be removed from safety and deployed again.
+- If a removed Master dies and is not recovered, the player permanently loses that Master.
+- This enables deliberate high-risk evolution attempts.
+- A clone that undergoes a meaningful transformation may itself be extracted and registered as a new Master.
+- Clones are normal individual units once deployed: they can die, be stolen, raised or lost.
+
+### Evolutions and world events
+
+- Events/regions may transform surviving undead into rare variants.
+- Example: a Giant taken into a lightning event may become a **Stormcharged Giant** if the transformation succeeds.
+- Transformation attempts should involve danger, not passive waiting.
+- Potential future mutation families include Stormcharged, Bloodbound, Ashforged, Frostbitten, Plagueborn, Fallen/Hallowed and Shadowtouched.
+- The player should often choose between keeping a valuable Master safe or risking it for a stronger/rarer evolution.
+
+### Factions and bosses
+
+- The Arena contains living factions that fight each other without player involvement.
+- Factions should provide distinct army identities and unit roles.
+- Players can deliberately hunt particular factions to customise army composition.
+- Bosses can be raised and permanently owned.
+- Boss abilities used against the player translate into abilities used while the boss is owned.
+- Bosses have high Command Capacity cost, long clone times and a one-major-boss deployment limit initially.
+
+### Servers, matchmaking and friends
+
+- Initial Arena target: **8 Necromancers per server**.
+- Normal matchmaking should quietly consider Command Capacity, Rebirth tier and eventually loadout/recent PvP strength.
+- Matchmaking should not feel like a rigid visible ranked ladder.
+- Players may explicitly join friends even when the friend's server is above/below their normal matchmaking band.
+- Joining a stronger friend's server means accepting the higher risk.
+- Future parties should match primarily using the strongest/highest-band player to prevent smurfing into beginner servers.
+- Trading is **not planned for initial release**.
+
+## Phase 0 - Recovery and consolidation - COMPLETE
+
+Completed on 1 October 2026.
+
+- Recovered latest Feb 18 source.
+- Consolidated old playable Workspace shell with recovered systems.
+- Added canonical `place.rbxl`.
+- Restored seven current unit templates and the Yasu foliage pack.
+- Fixed Rojo StarterPlayerScripts mapping.
+- Restored/ported player Bone Sword combat into the Humanoid-based recovered backend.
+- Verified 3 Skeleton starter army.
+- Verified NPC battlefield population and AI startup.
+- Verified Bone Sword kill -> last-hit attribution -> Raise success.
+- Verified Arena -> Sanctum -> backpack -> Arena redeployment.
+- Verified cold-open playtest from tracked `place.rbxl`.
+- Recovery baseline is committed in Git.
+
+## Phase 1 - Core combat and active necromancy
+
+**Goal:** make killing one enemy and raising it feel good enough to support the entire game.
+
+Work:
+- Replace automatic corpse raising with active raising.
+- Add corpse state and 20-second lifetime.
+- Add killer-only 6-second Soul Claim window.
+- Add 3-failure corpse attempt state.
+- Add raise chance calculation based on unit difficulty + Necromancer proficiency.
+- Add capacity check before Raise begins.
+- Add clear "Army Full / Need X Capacity" feedback.
+- Add Banish command.
+- Add Raise targeting/interaction UI.
+- Add Raise channel animation.
+- Add Raise success/failure VFX and audio.
+- Add corpse decay/failure visuals.
+- Improve player attack animation and weapon feel.
+- Add enemy hit reaction and death presentation.
+- Improve own-army visual identification.
+
+**Acceptance:**
+- Player can deliberately kill, target and attempt to raise a corpse.
+- Raise can succeed or fail.
+- Three failed attempts destroy the corpse.
+- Full army blocks Raise without consuming an attempt.
+- Banish frees capacity and allows a previously blocked Raise.
+- Killer exclusivity and post-6-second free-for-all work correctly.
+- Corpse disappears at expiry.
+- Growing from roughly 5 -> 20 units is already satisfying without relying on meta progression.
+
+## Phase 2 - Tactical army control and formations
+
+**Goal:** make the player feel like an army commander rather than a pet owner.
+
+Work:
+- Introduce cohorts/formations.
+- Frontline / Second Line / Ranged / Flanks / Rear Guard / Personal Guard.
+- Formation Editor in Base.
+- Save formation assignments.
+- Follow/Regroup.
+- Move Here.
+- Hold Position.
+- Attack Target.
+- Retreat.
+- Formation switching in combat.
+- Per-cohort behaviour where useful.
+- Better spacing, local avoidance and anti-pile-up.
+
+**Acceptance:**
+- Player can build a shield-front / ranged-rear formation.
+- Formation remains understandable while moving and fighting.
+- Commands work without selecting hundreds of individual units.
+- A player can intentionally screen archers with armoured melee units.
+
+## Phase 3 - Scale to several hundred undead
+
+**Goal:** make the target army scale technically viable before adding lots of content.
+
+Technical direction:
+- Cohort-level movement decisions.
+- Lightweight local steering for members.
+- Avoid individual expensive pathfinding wherever possible.
+- Budget combat/target updates across frames.
+- Distance-based AI update rates.
+- Animation/visual LOD.
+- Reduced simulation for distant irrelevant fights.
+- Network ownership/replication review.
+- Pooling where useful.
+
+Stress gates:
+- 25 owned units.
+- 50 owned units.
+- 100 owned units.
+- 200 owned units.
+- 300 owned units.
+- Multiple players plus active NPC factions.
+
+**Acceptance:**
+- Large armies remain responsive and readable.
+- Server frame time and network use remain within acceptable limits.
+- No catastrophic pile-up, pathfinding or replication failure.
+
+## Phase 4 - PvP rules and battlefield theft
+
+**Goal:** make army-vs-army PvP the central source of tension.
+
+Work:
+- Dedicated two-player PvP acceptance tests.
+- Corpse Soul Claim ownership.
+- Enemy-unit raising during active PvP.
+- Necromancer death -> deployed army loss.
+- Lost units become battlefield opportunities.
+- Spawn protection.
+- Combat logging/logout rules.
+- Kill attribution.
+- Anti-safe-zone abuse.
+- Threat/scouting UI.
+- Approximate enemy level/rebirth/army threat readability.
+
+**Acceptance:**
+- Two players can fight, lose units, steal casualties and reverse momentum through raising.
+- Killing the Necromancer produces a meaningful but performant corpse/recovery event.
+- Death cannot be trivially exploited by logging/rejoining.
+
+## Phase 5 - Permanent collection, Masters and cloning
+
+**Goal:** create long-term ownership without removing battlefield risk.
+
+Work:
+- DataStore-backed individual unit collection.
+- Master/Soul Imprint records.
+- Put unit into cloning chamber.
+- Remove Master from chamber and risk it.
+- Soul Essence/resource economy.
+- Clone timers.
+- Offline production.
+- Machine output caps.
+- Multiple machine support.
+- Base machine upgrades.
+- Exact preservation of template/size/trait/evolution/ability data.
+- Safe save/retry/versioning strategy.
+
+**Acceptance:**
+- Extracted unit can become a permanent Master.
+- Player can leave the game and return without losing the Master.
+- Cloning progresses offline only while allowed by resource/storage rules.
+- Player can deploy a clone and lose it without deleting the Master.
+- Player can deliberately remove and permanently risk the Master.
+
+## Phase 6 - Necromancer levels, capacity, skills and Rebirth
+
+**Goal:** create clear long-term progression without making veteran PvP automatically unbeatable.
+
+Work:
+- Necromancer XP and levels.
+- Command Capacity progression.
+- Raise proficiency progression.
+- Raise speed/reach progression where appropriate.
+- Weighted unit capacity.
+- Skill-slot unlocks.
+- Maximum 3 equipped Necromancer skills.
+- Skill loadout changed only at Base.
+- Initial skills: Bone Wall, Fear Pulse, Rally, Corpse Explosion, Regroup, Sacrifice/Frenzy candidates.
+- Rebirth system.
+- Rebirth rewards focused on options/prestige/base progression rather than huge raw damage multipliers.
+
+**Acceptance:**
+- Level progression visibly expands army possibilities.
+- Level 1 works with a small army and no active skill slots.
+- Higher levels allow larger/more specialised compositions.
+- Rebirth is desirable without making new-player PvP pointless.
+
+## Phase 7 - Factions and army identity
+
+**Goal:** turn PvE into a source of strategically different army components.
+
+Work:
+- Multiple autonomous factions.
+- Faction-vs-faction conflicts.
+- Distinct unit roles: shields, spears, archers, cavalry, casters, brutes, support, etc.
+- Region/faction spawn identities.
+- Unit readability at distance.
+- Undead versions retain combat role.
+- Faction-specific rare/elites.
+
+**Acceptance:**
+- Two players at the same capacity can deliberately build visibly different armies.
+- Watching an NPC faction battle should create useful corpse opportunities even without player initiation.
+
+## Phase 8 - Boss ownership and elite encounters
+
+**Goal:** make bosses aspirational army prizes, not only loot sources.
+
+Work:
+- Boss ability framework shared between enemy and owned state.
+- Boss Raise difficulty.
+- Boss corpse presentation.
+- Boss cloning cost/time.
+- One-major-boss deployment restriction.
+- Boss command/AI behaviour within formations.
+- Boss-specific VFX/readability.
+
+**Acceptance:**
+- Defeating and successfully raising a boss produces an owned boss with recognisably the same signature abilities.
+- Owned bosses are powerful but do not invalidate army composition.
+
+## Phase 9 - Events and undead evolution
+
+**Goal:** create high-risk ways to transform existing valuable units.
+
+Work:
+- Event framework.
+- Lightning/storm event prototype.
+- Eligible-unit transformation rules.
+- Survival/failure risk.
+- Master/clone evolution persistence.
+- Event telegraphing.
+- Limited-time map conditions.
+
+**Acceptance:**
+- Player can intentionally bring a valued unit into an event, risk losing it, transform it, extract it and register the transformed unit as a new Master.
+
+## Phase 10 - Proper Arena world and Base
+
+**Goal:** replace the recovery placeholder world with an authored game space.
+
+Arena:
+- Multiple faction regions.
+- Elevation and sightlines.
+- Battles visible in the distance.
+- Dangerous high-reward regions.
+- PvP ambush/retreat routes.
+- Boss/event spaces.
+
+Base:
+- Soul chambers/cloning room.
+- Formation Editor.
+- Skill loadout area.
+- Codex.
+- Master/unit displays.
+- Upgradeable machine/building presentation.
+- Boss trophies and cosmetics.
+
+**Acceptance:**
+- The world naturally produces decisions about risk, scouting, faction hunting and PvP.
+- The Base is useful without becoming where most playtime is spent.
+
+## Phase 11 - Matchmaking, friends and social play
+
+**Goal:** keep always-on PvP viable while preserving Roblox friend play.
+
+Work:
+- Background matchmaking bands.
+- Capacity/Rebirth/loadout strength inputs.
+- 8-player Arena target.
+- Join Friend override.
+- Party support.
+- Strongest-member matchmaking for parties.
+- Server hopping protections.
+- Friend/party indicators in battle.
+
+**Acceptance:**
+- Normal players usually meet reasonably comparable threats.
+- Friends can still join one another across progression bands.
+- Low-level accounts cannot easily drag veteran armies into beginner servers.
+
+## Phase 12 - Polish, onboarding, analytics and launch preparation
+
+Work:
+- Final HUD.
+- Mobile/controller support.
+- Short tutorial.
+- Audio pass.
+- Music.
+- Resurrection/death/boss VFX polish.
+- Accessibility/readability.
+- Performance settings.
+- Analytics events.
+- Retention funnel.
+- Soft-launch balance.
+- Cosmetics-first monetisation.
+- No trading at initial release.
+
+Key analytics:
+- First kill.
+- First Raise attempt.
+- First Raise success/failure.
+- First army of 10/25/50/etc.
+- First PvP encounter.
+- First PvP kill/death.
+- First extraction.
+- First Master imprint.
+- First clone.
+- First boss capture.
+- Session length, D1/D7 retention, extraction rate and average peak army capacity.
+
+## Immediate next milestone
+
+**Begin Phase 1: Core combat and active necromancy.**
+
+The first implementation slice should be:
+1. Introduce persistent corpse objects/states.
+2. Stop automatic raising.
+3. Add active Raise interaction.
+4. Add per-unit Raise chance and Necromancer proficiency hook.
+5. Add 3-failure limit.
+6. Add 6-second killer claim + 20-second corpse expiry.
+7. Add Command Capacity validation.
+8. Add Army Full feedback.
+9. Add Banish.
+10. Playtest the full kill -> corpse -> raise/fail -> join-army loop before adding further content.
+
+No major new faction, boss, progression, Base or world-content work should begin until this Phase 1 loop is fun and reliable.
