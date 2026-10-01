@@ -84,10 +84,19 @@ local COHORTS = {
 	"PersonalGuard",
 }
 
+local FORMATION_PRESETS = {
+	"Standard",
+	"Defensive",
+	"Aggressive",
+	"Compact",
+}
+
 local buttons: { [string]: TextButton } = {}
 local cohort_buttons: { [string]: TextButton } = {}
+local preset_buttons: { [string]: TextButton } = {}
 local targeting_mode: string? = nil
 local active_mode = "FOLLOW"
+local active_preset = "Standard"
 local formation_panel: Frame? = nil
 local formation_counts_label: TextLabel? = nil
 local formation_target_label: TextLabel? = nil
@@ -141,6 +150,22 @@ local function update_button_states()
 				and Color3.fromRGB(110, 220, 165)
 				or Color3.fromRGB(80, 110, 98)
 			stroke.Transparency = selected and 0.08 or 0.45
+		end
+	end
+end
+
+local function update_preset_button_states()
+	for preset, button in pairs(preset_buttons) do
+		local selected = preset == active_preset
+		button.BackgroundColor3 = selected
+			and Color3.fromRGB(54, 92, 69)
+			or Color3.fromRGB(28, 36, 33)
+		local stroke = button:FindFirstChild("PresetStroke")
+		if stroke and stroke:IsA("UIStroke") then
+			stroke.Color = selected
+				and Color3.fromRGB(125, 225, 170)
+				or Color3.fromRGB(74, 101, 90)
+			stroke.Transparency = selected and 0.05 or 0.5
 		end
 	end
 end
@@ -247,7 +272,7 @@ local function create_formation_panel()
 	panel.Name = "FormationPanel"
 	panel.AnchorPoint = Vector2.new(0.5, 1)
 	panel.Position = UDim2.new(0.5, 0, 1, -176)
-	panel.Size = UDim2.fromOffset(700, 128)
+	panel.Size = UDim2.fromOffset(700, 174)
 	panel.BackgroundColor3 = Color3.fromRGB(13, 16, 18)
 	panel.BackgroundTransparency = 0.08
 	panel.BorderSizePixel = 0
@@ -272,7 +297,7 @@ local function create_formation_panel()
 	title.TextSize = 14
 	title.TextColor3 = Color3.fromRGB(220, 235, 226)
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Text = "Formation — aim at one of your undead, then assign its cohort"
+	title.Text = "Formation — switch combat shape or assign an undead cohort"
 	title.Parent = panel
 
 	local target_label = Instance.new("TextLabel")
@@ -301,9 +326,65 @@ local function create_formation_panel()
 	counts_label.Parent = panel
 	formation_counts_label = counts_label
 
+	local preset_label = Instance.new("TextLabel")
+	preset_label.Position = UDim2.fromOffset(12, 50)
+	preset_label.Size = UDim2.fromOffset(94, 32)
+	preset_label.BackgroundTransparency = 1
+	preset_label.Font = Enum.Font.GothamBold
+	preset_label.TextSize = 11
+	preset_label.TextColor3 = Color3.fromRGB(175, 200, 187)
+	preset_label.TextXAlignment = Enum.TextXAlignment.Left
+	preset_label.Text = "Combat preset:"
+	preset_label.Parent = panel
+
+	local preset_row = Instance.new("Frame")
+	preset_row.Position = UDim2.fromOffset(108, 50)
+	preset_row.Size = UDim2.new(1, -120, 0, 32)
+	preset_row.BackgroundTransparency = 1
+	preset_row.Parent = panel
+
+	local preset_layout = Instance.new("UIListLayout")
+	preset_layout.FillDirection = Enum.FillDirection.Horizontal
+	preset_layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	preset_layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	preset_layout.Padding = UDim.new(0, 6)
+	preset_layout.Parent = preset_row
+
+	for index, preset in ipairs(FORMATION_PRESETS) do
+		local button = Instance.new("TextButton")
+		button.Name = preset .. "Preset"
+		button.LayoutOrder = index
+		button.Size = UDim2.fromOffset(115, 30)
+		button.BackgroundColor3 = Color3.fromRGB(28, 36, 33)
+		button.BorderSizePixel = 0
+		button.AutoButtonColor = true
+		button.Font = Enum.Font.GothamBold
+		button.TextSize = 11
+		button.TextColor3 = Color3.fromRGB(220, 232, 225)
+		button.Text = preset
+		button.Parent = preset_row
+
+		local button_corner = Instance.new("UICorner")
+		button_corner.CornerRadius = UDim.new(0, 6)
+		button_corner.Parent = button
+
+		local button_stroke = Instance.new("UIStroke")
+		button_stroke.Name = "PresetStroke"
+		button_stroke.Color = Color3.fromRGB(74, 101, 90)
+		button_stroke.Transparency = 0.5
+		button_stroke.Thickness = 1
+		button_stroke.Parent = button
+
+		button.Activated:Connect(function()
+			command_remote:FireServer("SET_FORMATION_PRESET", preset)
+		end)
+
+		preset_buttons[preset] = button
+	end
+
 	local row = Instance.new("Frame")
-	row.Position = UDim2.fromOffset(10, 54)
-	row.Size = UDim2.new(1, -20, 0, 62)
+	row.Position = UDim2.fromOffset(10, 96)
+	row.Size = UDim2.new(1, -20, 0, 66)
 	row.BackgroundTransparency = 1
 	row.Parent = panel
 
@@ -486,8 +567,23 @@ player:GetAttributeChangedSignal("ArmyCommandMode"):Connect(function()
 	end
 end)
 
+player:GetAttributeChangedSignal("FormationPreset"):Connect(function()
+	local preset = player:GetAttribute("FormationPreset")
+	if typeof(preset) == "string" then
+		active_preset = preset
+		update_preset_button_states()
+	end
+end)
+
 local initial_mode = player:GetAttribute("ArmyCommandMode")
 if typeof(initial_mode) == "string" then
 	active_mode = initial_mode
 end
+
+local initial_preset = player:GetAttribute("FormationPreset")
+if typeof(initial_preset) == "string" then
+	active_preset = initial_preset
+end
+
 update_button_states()
+update_preset_button_states()

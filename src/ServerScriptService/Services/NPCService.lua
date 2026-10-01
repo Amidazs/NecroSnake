@@ -1,10 +1,12 @@
 --!strict
 
+local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
+local TweenService = game:GetService("TweenService")
 
 
 local NPCService = {}
@@ -388,6 +390,57 @@ local function get_attack_stats(attacker_model: Model): (number, number)
 	return damage, cooldown
 end
 
+local function get_effective_attack_range(model: Model): number
+	local value = get_number_attr(model, "AttackRange")
+	if not value or value <= 0 then
+		return ATTACK_RANGE
+	end
+	return clamp(value, ATTACK_RANGE, 80)
+end
+
+local function get_preferred_range(model: Model): number
+	local attack_range = get_effective_attack_range(model)
+	local value = get_number_attr(model, "PreferredRange")
+	if value and value > 0 then
+		return clamp(value, ATTACK_RANGE, math.max(ATTACK_RANGE, attack_range - 0.5))
+	end
+	if attack_range <= ATTACK_RANGE + 0.5 then
+		return ATTACK_RANGE - 1
+	end
+	return clamp(attack_range * 0.75, 8, attack_range - 1)
+end
+
+local function emit_arrow_tracer(from_root: BasePart, target_root: BasePart)
+	local start_pos = from_root.Position + Vector3.new(0, 1.5, 0)
+	local end_pos = target_root.Position + Vector3.new(0, 1.2, 0)
+	local delta = end_pos - start_pos
+	if delta.Magnitude < 0.1 then
+		return
+	end
+
+	local arrow = Instance.new("Part")
+	arrow.Name = "NecroArrowTracer"
+	arrow.Size = Vector3.new(0.12, 0.12, 1.7)
+	arrow.Color = Color3.fromRGB(117, 79, 44)
+	arrow.Material = Enum.Material.Wood
+	arrow.Anchored = true
+	arrow.CanCollide = false
+	arrow.CanTouch = false
+	arrow.CanQuery = false
+	arrow.CastShadow = false
+	arrow.CFrame = CFrame.lookAt(start_pos, end_pos)
+	arrow.Parent = Workspace
+
+	local travel_time = clamp(delta.Magnitude / 85, 0.12, 0.42)
+	local tween = TweenService:Create(
+		arrow,
+		TweenInfo.new(travel_time, Enum.EasingStyle.Linear),
+		{ CFrame = CFrame.lookAt(end_pos, end_pos + delta.Unit) }
+	)
+	tween:Play()
+	Debris:AddItem(arrow, travel_time + 0.08)
+end
+
 local function compute_damage_after_defense(target_model: Model, raw_damage: number): number
 	-- Defense is a fraction [0..0.9] meaning damage reduction.
 	local defense = get_number_attr(target_model, "Defense")
@@ -537,23 +590,28 @@ local function compute_attack_approach_goal(
 	unit_count: number,
 	target_pos: Vector3
 ): Vector3
-	-- Spread attackers around the target, but keep the approach point INSIDE
-	-- ATTACK_RANGE so units actually hit instead of orbiting nearby.
 	local count = math.max(1, unit_count)
-	local scale = get_size_scale(unit.model)
+	local attack_range = get_effective_attack_range(unit.model)
+	local preferred_range = get_preferred_range(unit.model)
+	local angle = ((unit_index - 1) / count) * (math.pi * 2)
 
+	if attack_range > ATTACK_RANGE + 0.5 then
+		local ranged_radius = math.min(attack_range - 0.75, preferred_range)
+		local offset = Vector3.new(
+			math.cos(angle) * ranged_radius,
+			0,
+			math.sin(angle) * ranged_radius
+		)
+		return Vector3.new(target_pos.X, 6, target_pos.Z) + offset
+	end
+
+	-- Melee units keep a tight pressure ring.
+	local scale = get_size_scale(unit.model)
 	local seed = get_spawn_time_seed(unit.model)
 	local extra = ((seed % 17) * 0.08)
-
-	local angle = ((unit_index - 1) / count) * (math.pi * 2)
-	-- Keep attackers close so they don't "orbit" just outside melee.
-	-- Smaller base + smaller scale influence = more pressure.
 	local raw_radius = (BASE_ATTACK_RING_RADIUS * 0.55 + extra) + (scale * 0.85)
-
-	-- Always stay well inside attack range, and clamp to a tight melee stick radius.
 	local max_radius = math.max(MELEE_STICK_RADIUS, ATTACK_RANGE - 2.0)
 	local radius = math.min(raw_radius, max_radius)
-
 
 	local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
 	return Vector3.new(target_pos.X, 6, target_pos.Z) + offset
@@ -1562,7 +1620,8 @@ function NPCService.start()
 
 						-- 2) ATTACKING
 						-- Always allow attacks if in range (even while fleeing).
-						if dist <= ATTACK_RANGE then
+						local attack_range = get_effective_attack_range(npc_unit.model)
+						if dist <= attack_range then
 							local damage, cooldown = get_attack_stats(npc_unit.model)
 							local t = now()
 
@@ -1577,6 +1636,9 @@ function NPCService.start()
 								state.target_model:SetAttribute("LastDamageSourceKind", "NPC")
 								state.target_model:SetAttribute("LastHitOwnerUserId", 0)
 								state.target_model:SetAttribute("LastHitTime", os.clock())
+								if attack_range > ATTACK_RANGE + 0.5 then
+									emit_arrow_tracer(npc_unit.root, state.target_root)
+								end
 								state.target_humanoid:TakeDamage(final_damage)
 							end
 						end

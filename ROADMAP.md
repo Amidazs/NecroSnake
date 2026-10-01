@@ -224,7 +224,7 @@ Work:
 
 ## Phase 2 - Tactical army control and formations
 
-**Status:** IN PROGRESS - whole-army commands + cohort formation + Base Formation Editor GREEN on 1 October 2026.
+**Status:** IN PROGRESS - whole-army commands + cohort formation + Base Formation Editor + combat presets/spacing/watchdog + first real ranged content mechanically GREEN on 1 October 2026; hands-on readability review remains.
 
 **Goal:** make the player feel like an army commander rather than a pet owner.
 
@@ -238,9 +238,9 @@ Work:
 - [x] Hold Position.
 - [x] Attack Target.
 - [x] Retreat.
-- [ ] Formation switching in combat.
-- [x] Per-cohort positioning for Follow / Move Here / Hold / Retreat; combat-specific cohort behaviour remains to be expanded as ranged/support unit types arrive.
-- [ ] Better spacing, local avoidance and anti-pile-up.
+- [x] Formation switching in combat with Standard / Defensive / Aggressive / Compact presets.
+- [x] Per-cohort positioning for Follow / Move Here / Hold / Retreat plus engine-side combat behaviour for Frontline / Ranged / Rear Guard / Flanks / Personal Guard.
+- [x] Better spacing, lightweight local separation/anti-pile-up, and stuck-unit watchdog recovery.
 
 **Command foundation test evidence:**
 - Hold kept a three-unit army at its commanded location while the player moved about 28 studs away.
@@ -254,7 +254,7 @@ Work:
 - Real NPC final-blow test destroyed a 1-HP owned unit on the next NPC attack cycle with no entry created in `Workspace.Corpses`.
 
 **Cohort formation test evidence:**
-- Existing/newly owned units receive a `Cohort` attribute from their template default; tested defaults are Weak Skeleton/Skeleton -> Second Line, Skeleton Knight/Zombie Brute/Dark Knight -> Frontline, and Grave Baron/Crypt Warden -> Personal Guard.
+- Existing/newly owned units receive a `Cohort` attribute from their template default; tested defaults are Weak Skeleton/Skeleton -> Second Line, Skeleton Archer -> Ranged, Skeleton Knight/Zombie Brute/Dark Knight -> Frontline, and Grave Baron/Crypt Warden -> Personal Guard.
 - Formation panel exposes all six cohorts with live counts and allows the player to aim at an owned living unit and reassign its cohort; the server validates ownership before applying the change.
 - Mixed-cohort Hold test placed Frontline about 12.6 studs ahead, Ranged about 8.4 studs behind, and Personal Guard about 2.3 studs close behind the anchor.
 - The same mixed formation preserved those bands after a Move Here command; on arrival the army automatically returned to Hold.
@@ -267,8 +267,20 @@ Work:
 - Arena edit test attempted `Skeleton -> Frontline` and was rejected with `Formation defaults can only be edited in the Sanctum`; the live units remained Ranged.
 - Unpublished Studio safely uses a session-only formation-profile fallback because Roblox DataStore access requires a published place; published servers use `NecroSnakeFormationProfile_v1` and save template -> cohort overrides.
 - Test overrides were reset before saving the canonical place; live Skeletons returned to the catalogue `SecondLine` default.
+- Combat preset test confirmed the formation physically reshapes rather than only changing UI state: Standard Frontline ~14.8 studs ahead / Ranged ~6.1 behind / Personal Guard ~2.2 close; Defensive pulls Frontline back to ~11.8 and Ranged to ~7.9; Aggressive pushes Frontline to ~17.1 while Ranged advances to ~5.5; Compact tightens Frontline to ~9.7.
+- Temporary ranged-contract validation (`AttackRange = 24`, `PreferredRange = 18`) held a Ranged test unit at ~19.8 studs while it continued damaging the selected target; when the target moved, the unit stayed just inside its 24-stud attack range instead of collapsing into melee.
+- Personal Guard combat validation confirmed it stays with the Necromancer when an explicit Attack Target is beyond the 20-stud guard-engage radius, while Frontline and Ranged continue the attack.
+- Pile-up validation deliberately stacked three Frontline units on one point; after entering combat they separated to a minimum pair distance of ~2.6 studs and still reduced the dummy target from 3000 to 2970 HP.
+- Stuck-unit watchdog validation immobilised a unit ~35.5 studs from the player: the first recovery cycle nudged it to ~34.1 studs and the second hard-recovered it to ~11.3 studs. Formation/cohort changes now reset watchdog progress baselines to avoid false-positive recovery after intentional reshaping.
+- `AttackRange` / `PreferredRange` are part of the ModelLibrary stat contract and now power genuine ranged content rather than only temporary validation attributes.
+- Added `SkeletonArcher` as a real generated ModelLibrary template with visible bow/quiver treatment, 45 HP, 8 damage, 1.25 s cooldown, 30-stud attack range, 22-stud preferred range, Command Cost 1, `DefaultCohort = Ranged`, and 75% base Raise chance. It automatically participates in ordinary weighted NPC group spawning.
+- Fresh-start spawn validation found 26 natural Skeleton Archers in the live battlefield, each carrying the real 30/22 range contract and ranged default cohort.
+- Hostile-Archer validation used a natural Archer in a test-runtime non-fleeing group: it dealt an 8-damage ranged hit, emitted arrow tracers, and finished about 21.4 studs from the player against its 22-stud preferred range.
+- Capture validation killed and actively Raised two natural Skeleton Archers; both retained `TemplateName = SkeletonArcher`, `Cohort = Ranged`, `AttackRange = 30`, `PreferredRange = 22`, and Command Cost 1 after becoming owned units.
+- Real shield-front / ranged-rear combat validation used three captured Skeleton Knights plus two captured Skeleton Archers. Frontline Knights fought at roughly 2.9-5.9 studs while the Archers held roughly 23.3-25.8 studs; the five-unit formation dealt 179 damage during the test window at 8 total Command Capacity.
+- The persistent Base Formation Editor already enumerates ModelLibrary templates dynamically, so Skeleton Archer automatically appears there with Ranged as its catalogue default and can receive a saved override like any other template.
 
-**Next Phase 2 slice:** add combat formation preset switching, ranged/support-specific cohort behaviours, then improve local spacing/avoidance before Phase 2 closeout.
+**Next Phase 2 slice:** hands-on mixed-combat readability/feel review with the real Skeleton Archer. If accepted, close Phase 2 and proceed with Phase 3 stress gates (25 -> 50 -> 100 -> 200 -> 300 owned units).
 
 **Acceptance:**
 - Player can build a shield-front / ranged-rear formation.

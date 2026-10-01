@@ -48,6 +48,8 @@ type StatDef = {
 	CommandCost: number,
 	BaseScale: number?,
 	DefaultCohort: string?,
+	AttackRange: number?,
+	PreferredRange: number?,
 
 	IsBoss: boolean?,
 	AlwaysRaise: boolean?,
@@ -93,6 +95,24 @@ local UNIT_STATS: { [string]: StatDef } = {
 		IsBoss = false,
 		AlwaysRaise = false,
 		RaiseChance = 0.85, -- 0..1
+	},
+
+	-- ========================
+	-- RANGED (common)
+	-- ========================
+	SkeletonArcher = {
+		Health = 45,
+		Damage = 8,
+		AttackCooldown = 1.25,
+		WalkSpeed = 11,
+		Weight = 1.4,
+		CommandCost = 1,
+		DefaultCohort = "Ranged",
+		AttackRange = 30,
+		PreferredRange = 22,
+		IsBoss = false,
+		AlwaysRaise = false,
+		RaiseChance = 0.75,
 	},
 
 	-- ========================
@@ -255,6 +275,128 @@ local function normalize_template_key(name: string): string
 	local lower = string.lower(name)
 	local stripped = string.gsub(lower, "[%s_]+", "")
 	return stripped
+end
+
+local function find_first_body_part(
+	model: Model,
+	names: { string }
+): BasePart?
+	for _, name in ipairs(names) do
+		local part = model:FindFirstChild(name, true)
+		if part and part:IsA("BasePart") then
+			return part
+		end
+	end
+	return model.PrimaryPart
+end
+
+local function weld_visual_part(
+	model: Model,
+	name: string,
+	size: Vector3,
+	color: Color3,
+	material: Enum.Material,
+	body_part: BasePart,
+	local_cframe: CFrame
+): BasePart
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Size = size
+	part.Color = color
+	part.Material = material
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Massless = true
+	part.CastShadow = true
+	part.CFrame = body_part.CFrame * local_cframe
+	part.Parent = model
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = body_part
+	weld.Part1 = part
+	weld.Parent = part
+	return part
+end
+
+local function ensure_skeleton_archer_template()
+	if not model_library_folder then
+		return
+	end
+	if model_library_folder:FindFirstChild("SkeletonArcher") then
+		return
+	end
+
+	local source = model_library_folder:FindFirstChild("Skeleton")
+		or model_library_folder:FindFirstChild("WeakSkeleton")
+	if not (source and source:IsA("Model")) then
+		warn(
+			"[ModelLibraryService] Cannot generate SkeletonArcher: "
+				.. "Skeleton source template missing"
+		)
+		return
+	end
+
+	local archer = source:Clone()
+	archer.Name = "SkeletonArcher"
+	archer:SetAttribute("GeneratedTemplate", true)
+
+	local hand = find_first_body_part(
+		archer,
+		{ "RightHand", "Right Arm", "RightLowerArm" }
+	)
+	if hand then
+		local wood = Color3.fromRGB(92, 58, 34)
+		weld_visual_part(
+			archer,
+			"BowGrip",
+			Vector3.new(0.18, 2.9, 0.18),
+			wood,
+			Enum.Material.Wood,
+			hand,
+			CFrame.new(0, -0.25, -0.45)
+				* CFrame.Angles(0, 0, math.rad(8))
+		)
+		weld_visual_part(
+			archer,
+			"BowUpperLimb",
+			Vector3.new(0.16, 1.9, 0.16),
+			wood,
+			Enum.Material.Wood,
+			hand,
+			CFrame.new(0.28, 1.35, -0.45)
+				* CFrame.Angles(0, 0, math.rad(-18))
+		)
+		weld_visual_part(
+			archer,
+			"BowLowerLimb",
+			Vector3.new(0.16, 1.9, 0.16),
+			wood,
+			Enum.Material.Wood,
+			hand,
+			CFrame.new(-0.28, -1.65, -0.45)
+				* CFrame.Angles(0, 0, math.rad(-18))
+		)
+	end
+
+	local torso = find_first_body_part(
+		archer,
+		{ "UpperTorso", "Torso", "HumanoidRootPart" }
+	)
+	if torso then
+		weld_visual_part(
+			archer,
+			"Quiver",
+			Vector3.new(0.55, 2.1, 0.55),
+			Color3.fromRGB(70, 45, 30),
+			Enum.Material.Fabric,
+			torso,
+			CFrame.new(0.65, 0.25, 0.75)
+				* CFrame.Angles(math.rad(-12), 0, math.rad(16))
+		)
+	end
+
+	archer.Parent = model_library_folder
 end
 
 local function rebuild_template_lookup()
@@ -539,6 +681,19 @@ local function apply_stats_size_traits(
 	end
 	model:SetAttribute("CommandCost", command_cost)
 	model:SetAttribute("DefaultCohort", def.DefaultCohort or "SecondLine")
+	if typeof(def.AttackRange) == "number" then
+		model:SetAttribute("AttackRange", math.max(1, def.AttackRange))
+	else
+		model:SetAttribute("AttackRange", nil)
+	end
+	if typeof(def.PreferredRange) == "number" then
+		model:SetAttribute(
+			"PreferredRange",
+			math.max(1, def.PreferredRange)
+		)
+	else
+		model:SetAttribute("PreferredRange", nil)
+	end
 
 	set_model_scale_to(model, scale)
 
@@ -581,6 +736,7 @@ function ModelLibraryService.init()
 	npc_folder = ensure_npc_folder()
 	ensure_collision_groups_exist()
 
+	ensure_skeleton_archer_template()
 	rebuild_template_lookup()
 end
 
