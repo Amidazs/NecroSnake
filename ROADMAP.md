@@ -249,7 +249,7 @@ Work:
 - Attack Target kept the army focused on the selected controlled target and reduced it from 400 to 390 HP with `PLAYER_ARMY` final-damage attribution.
 - Retreat broke the attack command, reduced army/player separation from about 38 studs to about 4.6 studs, then automatically restored Follow.
 - Command UI exposes Follow -> Move Here -> Hold -> Attack Target -> Retreat in a fixed order without selecting individual units.
-- Visible Banish button was repositioned above the Veil Gate panel after visual QA; the `B` shortcut remains available.
+- Visible Banish button was repositioned above the Veil Gate panel after visual QA; the `B` shortcut remains available. The current-build Banish path removed the aimed owned unit, updated Command Capacity from 3/5 to 2/5, and returned the correct success feedback.
 - Static-corpse regression test showed 0 studs movement and 0 velocity after death.
 - Real NPC final-blow test destroyed a 1-HP owned unit on the next NPC attack cycle with no entry created in `Workspace.Corpses`.
 
