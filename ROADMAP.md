@@ -576,6 +576,88 @@ Work:
   Brute/Cavalry/Skirmisher. Both armies used exactly 12 Command and all
   units retained visible faction identity.
 
+### Final faction unit model roster - parallel art track
+
+The Phase 7 template names such as Skeleton, WeakSkeleton and
+SkeletonArcher remain backend placeholders. Reusing one placeholder for
+several faction roles does not mean those roles share a final mesh. The
+final art roster below supersedes the placeholder visual roster and can be
+produced in parallel with later development phases.
+
+**R15 model standard:**
+- Every unit must use a Roblox R15-compatible humanoid rig.
+- Concept images must visibly support the R15 body hierarchy: Head,
+  UpperTorso, LowerTorso, upper/lower arms with hands, and upper/lower legs
+  with feet.
+- Monster anatomy may wrap around the R15 structure, but joint placement
+  and limb segmentation must remain suitable for an R15 rig.
+- Large brutes and bosses remain R15-compatible by scaling/proportioning
+  the same rig rather than using incompatible custom skeletons.
+- Cavalry-role units are fast R15 shock troops rather than mounted units,
+  so every gameplay unit can use the shared humanoid animation pipeline.
+- Reference images should use a neutral relaxed A-pose, separated limbs,
+  full-body framing and clearly visible equipment.
+- Living units require both a living mesh and a matching Raised undead
+  mesh.
+- A Raised version must preserve the original unit's silhouette, armour,
+  weapon, faction colours, proportions and role identity. It should look
+  like that exact unit after necromantic resurrection, not a generic
+  skeleton replacement.
+- Inherently undead factions require one primary undead mesh per unit.
+
+**Ossuary Legion - inherently undead:**
+- Bonewall Legionary - Shield - Common.
+- Marrow Pike - Spear - Common.
+- Rattlebow Deadeye - Archer - Common.
+- Ossuary Standard Bearer - Support - Uncommon.
+- Bonewheel Lancer - Cavalry - Elite; fast skeletal foot lancer.
+- Marrow Colossus - Brute - Elite.
+- Centurion Eternal - Reaver - Elite.
+
+**Mirebound Brood - living, with matching Raised versions:**
+- Mireback Bulwark - Shield - Common; broad toad-like humanoid.
+- Reedfang Hunter - Spear - Common; tall newt-like hunter.
+- Bogspitter - Ranged - Common; salamander-like poison specialist.
+- Spore Tender - Support - Common; fungal healer.
+- Mire Hexer - Caster - Uncommon; swamp ritualist.
+- Fen Stalker - Skirmisher - Uncommon; lean crocodilian hunter.
+- Mossjaw Hulk - Brute - Elite; huge moss-covered crocodilian.
+- Drowned Matriarch - Caster/Boss - Rare.
+
+**Ashen Covenant - living, with matching Raised versions:**
+- Cinder Warder - Shield - Common.
+- Ember Lancer - Spear - Common.
+- Sootstring Ranger - Archer - Common.
+- Ash Oracle - Caster - Common.
+- Coal-Surgeon - Support - Uncommon.
+- Cinder Reaver - Reaver - Elite.
+- Pyre Charger - Cavalry - Elite; fast horned R15 shock trooper.
+- Furnace Saint - Brute/Boss - Rare.
+
+**Grave Court - inherently undead:**
+- Sepulchre Guard - Shield - Common.
+- Pallbearer - Brute - Common.
+- Grave Jackal - Skirmisher - Common; jackal-headed R15 grave hunter.
+- Mourning Hexer - Caster - Common.
+- Mortuary Attendant - Support - Uncommon.
+- Headsman of the Court - Reaver - Elite.
+- Funeral Cavalier - Cavalry - Elite; swift undead foot lancer.
+- Grave Baron - Brute/Boss - Rare.
+- Crypt Warden - Caster/Boss - Rare.
+
+This target roster requires 48 final unit meshes: seven Ossuary meshes,
+eight living plus eight Raised Mirebound meshes, eight living plus eight
+Raised Ashen meshes, and nine Grave Court meshes.
+
+**Art-track acceptance:**
+- Every final gameplay unit has an approved R15-compatible model reference.
+- Every living unit has a recognisably matching Raised counterpart.
+- Each faction is identifiable by silhouette, materials and equipment at
+  normal gameplay distance.
+- Combat role and rarity remain readable without relying on nameplates.
+- Final meshes can replace backend placeholders without losing unit,
+  faction, role, rarity, Raise or persistence identity.
+
 ## Phase 8 - Boss ownership and elite encounters
 
 **Status:** COMPLETE - shared boss abilities, ownership rules and boss
