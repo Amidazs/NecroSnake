@@ -18,6 +18,7 @@ local SOUL_NOVA_ID = "SoulNova"
 local SOUL_NOVA_RANGE = 17
 local SOUL_NOVA_DAMAGE = 42
 local SOUL_NOVA_COOLDOWN = 7.5
+local SOUL_NOVA_COLOR = Color3.fromRGB(170, 70, 255)
 
 local GRAVE_CHAIN_ID = "GraveChain"
 local GRAVE_CHAIN_RANGE = 30
@@ -25,7 +26,9 @@ local GRAVE_CHAIN_DAMAGE = 28
 local GRAVE_CHAIN_COOLDOWN = 6.5
 local GRAVE_CHAIN_SLOW_SECONDS = 2.5
 local GRAVE_CHAIN_SPEED_FACTOR = 0.55
+local GRAVE_CHAIN_COLOR = Color3.fromRGB(80, 215, 255)
 
+local BOSS_CORPSE_COLOR = Color3.fromRGB(150, 85, 255)
 local VFX_LIFETIME_SECONDS = 0.55
 export type AbilityContext = {
 	source_kind: string,
@@ -93,7 +96,8 @@ end
 local function make_ring(
 	position: Vector3,
 	start_size: number,
-	end_size: number
+	end_size: number,
+	color: Color3
 )
 	local ring = Instance.new("Part")
 	ring.Name = "BossAbilityPulse"
@@ -102,6 +106,7 @@ local function make_ring(
 	ring.CanQuery = false
 	ring.CanTouch = false
 	ring.Material = Enum.Material.Neon
+	ring.Color = color
 	ring.Shape = Enum.PartType.Cylinder
 	ring.Transparency = 0.25
 	ring.Size = Vector3.new(
@@ -221,7 +226,8 @@ local function use_soul_nova(
 	make_ring(
 		root.Position,
 		5,
-		SOUL_NOVA_RANGE * 2
+		SOUL_NOVA_RANGE * 2,
+		SOUL_NOVA_COLOR
 	)
 	set_cooldown(attacker, SOUL_NOVA_COOLDOWN)
 	attacker:SetAttribute(
@@ -255,7 +261,12 @@ local function use_grave_chain(
 		compute_damage(target, GRAVE_CHAIN_DAMAGE)
 	)
 	apply_slow(target)
-	make_ring(target_root.Position, 3, 9)
+	make_ring(
+		target_root.Position,
+		3,
+		9,
+		GRAVE_CHAIN_COLOR
+	)
 	set_cooldown(attacker, GRAVE_CHAIN_COOLDOWN)
 	attacker:SetAttribute(
 		"LastBossAbilityUsed",
@@ -351,6 +362,7 @@ function BossAbilityService.decorate_corpse(
 	local light = Instance.new("PointLight")
 	light.Name = "BossCorpseLight"
 	light.Brightness = 2.2
+	light.Color = BOSS_CORPSE_COLOR
 	light.Range = 18
 	light.Parent = root
 
@@ -358,6 +370,7 @@ function BossAbilityService.decorate_corpse(
 		"ParticleEmitter"
 	)
 	particles.Name = "BossCorpseAura"
+	particles.Color = ColorSequence.new(BOSS_CORPSE_COLOR)
 	particles.Rate = 14
 	particles.Lifetime = NumberRange.new(0.8, 1.4)
 	particles.Speed = NumberRange.new(1.5, 3.5)

@@ -734,13 +734,6 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 	end
 
 	local t = now()
-	if typeof(owner_user_id) == "number"
-		and pvp_service
-		and pvp_service.register_damage
-	then
-		pvp_service.register_damage(owner_user_id, target)
-	end
-
 	local boss_used = false
 	if typeof(owner_user_id) == "number" then
 		boss_used = BossAbilityService.try_use_signature(
@@ -753,6 +746,12 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 		)
 	end
 	if boss_used then
+		if typeof(owner_user_id) == "number"
+			and pvp_service
+			and pvp_service.register_damage
+		then
+			pvp_service.register_damage(owner_user_id, target)
+		end
 		s.last_attack = t
 		return
 	end
@@ -761,6 +760,13 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 	end
 
 	s.last_attack = t
+
+	if typeof(owner_user_id) == "number"
+		and pvp_service
+		and pvp_service.register_damage
+	then
+		pvp_service.register_damage(owner_user_id, target)
+	end
 
 	-- Important: mark who got the last hit BEFORE applying damage.
 	stamp_last_hit_owner(attacker, target)
