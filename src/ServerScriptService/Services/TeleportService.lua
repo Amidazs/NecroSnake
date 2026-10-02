@@ -22,6 +22,7 @@ local request_token_by_user_id: { [number]: number } = {}
 
 local army_service = nil :: any
 local backpack_service = nil :: any
+local pvp_service = nil :: any
 
 local function log(message: string)
 	print("[TeleportService] " .. message)
@@ -143,7 +144,29 @@ local function deploy_backpack_into_world(player: Player)
 end
 
 local function handle_safezone_request(player: Player)
+	if pvp_service and pvp_service.can_enter_safe_zone then
+		local allowed, remaining =
+			pvp_service.can_enter_safe_zone(player)
+		if not allowed then
+			fire_result(
+				player,
+				false,
+				("Combat-tagged for %.1fs."):format(remaining)
+			)
+			return
+		end
+	end
+
+	local character = player.Character
+	local root = character
+		and character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		fire_result(player, false, "Character missing.")
+		return
+	end
+
 	local token = next_token(player.UserId)
+	local start_position = root.Position
 
 	fire_result(player, true, "Opening the veil... hold still (10s).")
 
@@ -156,6 +179,43 @@ local function handle_safezone_request(player: Player)
 			return
 		end
 
+		local current_character = player.Character
+		local current_root = current_character
+			and current_character:FindFirstChild("HumanoidRootPart")
+		local humanoid = current_character
+			and current_character:FindFirstChildOfClass("Humanoid")
+		if not (current_root and current_root:IsA("BasePart"))
+			or not humanoid
+			or humanoid.Health <= 0
+		then
+			fire_result(player, false, "Retreat cancelled.")
+			return
+		end
+
+		if (current_root.Position - start_position).Magnitude > 4 then
+			fire_result(
+				player,
+				false,
+				"Retreat cancelled: you moved."
+			)
+			return
+		end
+
+		if pvp_service and pvp_service.can_enter_safe_zone then
+			local allowed, remaining =
+				pvp_service.can_enter_safe_zone(player)
+			if not allowed then
+				fire_result(
+					player,
+					false,
+					("Retreat blocked by combat for %.1fs."):format(
+						remaining
+					)
+				)
+				return
+			end
+		end
+
 		stash_army_into_backpack(player)
 
 		local ok, err = teleport_player_to(player, "SafeZone")
@@ -164,6 +224,9 @@ local function handle_safezone_request(player: Player)
 			return
 		end
 
+		if pvp_service and pvp_service.mark_entered_safe_zone then
+			pvp_service.mark_entered_safe_zone(player)
+		end
 		fire_result(player, true, "You retreat to the sanctum.")
 	end)
 end
@@ -178,6 +241,9 @@ local function handle_arena_request(player: Player)
 	end
 
 	deploy_backpack_into_world(player)
+	if pvp_service and pvp_service.mark_entered_arena then
+		pvp_service.mark_entered_arena(player)
+	end
 	fire_result(player, true, "You step through the veil into the arena.")
 end
 
@@ -200,9 +266,14 @@ local function on_player_removing(player: Player)
 	backpack_service.clear_backpack(player)
 end
 
-function TeleportService.init(army_service_ref: any, backpack_service_ref: any)
+function TeleportService.init(
+	army_service_ref: any,
+	backpack_service_ref: any,
+	pvp_service_ref: any?
+)
 	army_service = army_service_ref
 	backpack_service = backpack_service_ref
+	pvp_service = pvp_service_ref
 end
 
 function TeleportService.start()

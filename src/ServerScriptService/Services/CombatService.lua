@@ -29,6 +29,7 @@ local ATTR_MAX_RAISE_FAILURES = "MaxRaiseFailures"
 local CORPSES_FOLDER_NAME = "Corpses"
 
 local army_service = nil :: any
+local pvp_service = nil :: any
 local running = false
 local scan_task: thread? = nil
 local result_remote: RemoteEvent? = nil
@@ -246,7 +247,7 @@ end
 local function is_claimed_by_other(model: Model, player: Player): (boolean, number)
 	local claim_owner = get_claim_owner(model)
 	local claim_expires = model:GetAttribute(ATTR_CLAIM_EXPIRES)
-	if claim_owner <= 0 or claim_owner == player.UserId then
+	if claim_owner == 0 or claim_owner == player.UserId then
 		return false, 0
 	end
 	if typeof(claim_expires) ~= "number" then
@@ -432,6 +433,10 @@ local function initialize_corpse(model: Model)
 		destroy_corpse(model, "BANISHED")
 		return
 	end
+
+	if pvp_service and pvp_service.record_unit_death then
+		pvp_service.record_unit_death(model)
+	end
 	if model:GetAttribute("LastDamageSourceKind") == "NPC" then
 		model:SetAttribute("NoRaiseReason", "NPC_KILL")
 		model:Destroy()
@@ -569,8 +574,12 @@ local function handle_banish(player: Player, model: Instance)
 	})
 end
 
-function CombatService.init(army_service_module)
+function CombatService.init(
+	army_service_module,
+	pvp_service_ref: any?
+)
 	army_service = army_service_module
+	pvp_service = pvp_service_ref
 end
 
 function CombatService.start()

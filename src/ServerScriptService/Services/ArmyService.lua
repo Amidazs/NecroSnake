@@ -247,17 +247,6 @@ local function hook_unit_death_cleanup(
 	end)
 end
 
-local function ensure_player_death_hooks(player: Player, character: Model)
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		return
-	end
-
-	humanoid.Died:Connect(function()
-		ArmyService.clear_army(player)
-	end)
-end
-
 local function compute_spread_offset(
 	index: number,
 	ring_radius: number,
@@ -531,7 +520,6 @@ function ArmyService.init(model_library, formation_profile_service_ref: any?)
 	Players.PlayerAdded:Connect(function(player)
 		initialize_player_progression(player)
 		player.CharacterAdded:Connect(function(character)
-			ensure_player_death_hooks(player, character)
 			if model_library_service.set_leaders_collision then
 				model_library_service.set_leaders_collision(character)
 			end
@@ -570,6 +558,40 @@ function ArmyService.get_army_units(player: Player): { Model }
 	end
 
 	return models
+end
+
+function ArmyService.kill_army_for_loss(
+	player: Player,
+	killer_user_id: number,
+	source_kind: string,
+	reason: string
+): number
+	local list = armies_by_user_id[player.UserId] or {}
+	local models: { Model } = {}
+
+	for _, unit in ipairs(list) do
+		if unit.model and unit.model.Parent ~= nil then
+			table.insert(models, unit.model)
+		end
+	end
+
+	-- Remove the live ownership list first. Died callbacks may fire
+	-- synchronously while the models are being converted into corpses.
+	armies_by_user_id[player.UserId] = {}
+	ArmyService.refresh_command_capacity(player)
+
+	for _, model in ipairs(models) do
+		model:SetAttribute("LastDamageSourceKind", source_kind)
+		model:SetAttribute("LastHitOwnerUserId", killer_user_id)
+		model:SetAttribute("PvPLossReason", reason)
+
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health > 0 then
+			humanoid.Health = 0
+		end
+	end
+
+	return #models
 end
 
 function ArmyService.clear_army(player: Player)

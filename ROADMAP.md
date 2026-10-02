@@ -343,25 +343,62 @@ Stress gates:
 
 ## Phase 4 - PvP rules and battlefield theft
 
+**Status:** COMPLETE - two-client PvP, battlefield theft, death loss, combat
+logout and 300-unit death-event validation GREEN on 2 October 2026.
+
 **Goal:** make army-vs-army PvP the central source of tension.
 
 Work:
-- Dedicated two-player PvP acceptance tests.
-- Corpse Soul Claim ownership.
-- Enemy-unit raising during active PvP.
-- Necromancer death -> deployed army loss.
-- Lost units become battlefield opportunities.
-- Spawn protection.
-- Combat logging/logout rules.
-- Kill attribution.
-- Anti-safe-zone abuse.
-- Threat/scouting UI.
-- Approximate enemy level/rebirth/army threat readability.
+- [x] Dedicated two-player PvP acceptance tests.
+- [x] Corpse Soul Claim ownership.
+- [x] Enemy-unit raising during active PvP.
+- [x] Necromancer death -> deployed army loss.
+- [x] Lost units become battlefield opportunities.
+- [x] Spawn protection.
+- [x] Combat logging/logout rules.
+- [x] Kill attribution.
+- [x] Anti-safe-zone abuse.
+- [x] Threat/scouting UI.
+- [x] Approximate enemy level/rebirth/army threat readability.
 
 **Acceptance:**
-- Two players can fight, lose units, steal casualties and reverse momentum through raising.
-- Killing the Necromancer produces a meaningful but performant corpse/recovery event.
-- Death cannot be trivially exploited by logging/rejoining.
+- [x] Two players can fight, lose units, steal casualties and reverse
+  momentum through raising.
+- [x] Killing the Necromancer produces a meaningful but performant
+  corpse/recovery event.
+- [x] Death cannot be trivially exploited by logging/rejoining.
+
+**2 October 2026 Phase 4 playtest evidence:**
+- Roblox Studio's programmatic Server + Clients test connected two distinct
+  simulated players (Player1 and Player2) and both client harnesses
+  initialized successfully.
+- Spawn protection blocked PvP damage until cleared; once protection ended,
+  ordinary PvP damage became valid.
+- Player2 lost one undead to Player1. The corpse assigned its Soul Claim to
+  Player1, PvP unit-kill/loss counters updated, and Player1 successfully Raised
+  it immediately. Player1's army increased from 3 -> 4 while Player2's fell
+  from 3 -> 2, demonstrating battlefield momentum reversal through theft.
+- The scouting HUD existed and became visible on both clients when the
+  Necromancers were brought within scouting distance. It exposes approximate
+  level, rebirth band and army-size threat rather than exact hidden strength.
+- Moving a victim into the Sanctum/safe-zone bounds blocked PvP damage.
+- PvP damage applied a combat tag and blocked retreat to the Sanctum while the
+  tag remained active. The existing 10-second retreat channel also re-checks
+  the tag at completion and cancels if the player moves.
+- Killing Player2's Necromancer credited Player1 with the PvP kill, credited
+  Player2 with the death, and converted Player2's two remaining deployed
+  undead into claimed raisable corpses instead of deleting them.
+- Player2 respawned with a fresh 3-unit starter army after the Necromancer
+  death, while the previous army remained lost on the battlefield.
+- A genuinely combat-tagged simulated client called LeaveTest() and
+  disconnected. The server's PlayerRemoving path converted all three deployed
+  units into COMBAT_LOGOUT corpses claimed for the opponent, preventing
+  logging/rejoining from preserving the deployed army.
+- Mass Necromancer-death validation at the full supported 300-unit army target
+  dispatched the ownership-loss operation in about 8.4 ms and established all
+  300 raisable claimed corpses in about 1.44 seconds in Studio.
+- The same mass-death path at 100 units dispatched in about 1.8 ms and settled
+  all 100 corpse resources in about 0.48 seconds.
 
 ## Phase 5 - Permanent collection, Masters and cloning
 
@@ -537,16 +574,19 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Continue Phase 1: presentation and combat feel.**
+**Begin Phase 5: permanent collection, Masters and cloning.**
 
-The active Raise rules are implemented and playtested. The next slice is:
-1. Add a dedicated Necromancer Raise/channel animation.
-2. Add visible soul/VFX movement from corpse to Necromancer/army on success.
-3. Add clear failure and third-failure soul-collapse VFX.
-4. Improve corpse decay/disintegration presentation.
-5. Improve Bone Sword attack animation and hit feel.
-6. Add enemy hit reactions and better death presentation.
-7. Review own-army readability in a growing crowd.
-8. Run a 5 -> 20 army-growth playtest and fix anything that makes growth feel unclear or unsatisfying.
+Phase 4's PvP risk loop is now technically closed. The next milestone is to
+turn successfully extracted battlefield gains into persistent long-term
+ownership without removing the risk of losing deployed clones or deliberately
+risked Masters.
 
-No major new faction, boss, permanent-progression, Base or world-content work should begin until this Phase 1 loop is fun and reliable.
+The first Phase 5 slice is the persistence foundation:
+1. Define the versioned per-unit persistent record.
+2. Persist extracted units separately from deployed battlefield state.
+3. Add Master / Soul Imprint registration.
+4. Add one cloning chamber with resource cost, timer and finite output.
+5. Make clone production resumable across sessions.
+6. Validate that a deployed clone can be lost without deleting its Master.
+7. Validate that deliberately deploying the Master itself can permanently lose
+   that Master when recovery fails.

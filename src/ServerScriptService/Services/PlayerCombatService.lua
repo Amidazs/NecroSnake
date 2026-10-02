@@ -20,6 +20,7 @@ local DAMAGE = 18
 local last_swing_by_user_id: { [number]: number } = {}
 local did_start = false
 local combat_feedback_remote: RemoteEvent? = nil
+local pvp_service = nil :: any
 
 local function get_remote(): RemoteEvent
 	local existing = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
@@ -96,6 +97,13 @@ local function can_damage(player: Player, target: Model): boolean
 
 	local owner_user_id = target:GetAttribute("ArmyOwnerUserId")
 	if typeof(owner_user_id) == "number" and owner_user_id == player.UserId then
+		return false
+	end
+
+	if pvp_service
+		and pvp_service.can_damage
+		and not pvp_service.can_damage(player.UserId, target)
+	then
 		return false
 	end
 
@@ -182,6 +190,10 @@ local function handle_swing(player: Player)
 				local damage = compute_damage(target)
 				local health_before = target_humanoid.Health
 
+				if pvp_service and pvp_service.register_damage then
+					pvp_service.register_damage(player.UserId, target)
+				end
+
 				target:SetAttribute("LastDamageSourceKind", "PLAYER")
 				target:SetAttribute("LastHitOwnerUserId", player.UserId)
 				target:SetAttribute("LastHitTime", os.clock())
@@ -225,6 +237,10 @@ local function hook_player(player: Player)
 		task.defer(give_tool, player)
 	end
 end
+function PlayerCombatService.init(pvp_service_ref: any?)
+	pvp_service = pvp_service_ref
+end
+
 function PlayerCombatService.start()
 	if did_start then
 		return

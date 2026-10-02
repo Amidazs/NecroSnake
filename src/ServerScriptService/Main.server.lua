@@ -30,6 +30,10 @@ local CombatService = require(
 	ServicesFolder:WaitForChild("CombatService")
 )
 
+local PvPService = require(
+	ServicesFolder:WaitForChild("PvPService")
+)
+
 local ArmyRegenService = require(
 	ServicesFolder:WaitForChild("ArmyRegenService")
 )
@@ -115,18 +119,25 @@ local function main()
 	FormationProfileService.init(ModelLibraryService)
 	FormationProfileService.start()
 	ArmyService.init(ModelLibraryService, FormationProfileService)
-	ArmyAIService.init(ArmyService)
+	PvPService.init(ArmyService)
+	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
 	NPCService.init(ModelLibraryService, ArmyService)
-	CombatService.init(ArmyService)
+	CombatService.init(ArmyService, PvPService)
+	PlayerCombatService.init(PvPService)
 
+	PvPService.start()
 	NPCService.start()
 	ArmyAIService.start()
 	CombatService.start()
 	ArmyRegenService.start()
 
-	TeleportService.init(ArmyService, BackpackService)
+	TeleportService.init(
+		ArmyService,
+		BackpackService,
+		PvPService
+	)
 	TeleportService.start()
 	PlayerMovementService.start()
 	PlayerCombatService.start()

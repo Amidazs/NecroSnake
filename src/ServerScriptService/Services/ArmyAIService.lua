@@ -11,6 +11,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local ArmyAIService = {}
 
 local army_service = nil :: any
+local pvp_service = nil :: any
 local running = false
 local ai_task: thread? = nil
 
@@ -456,7 +457,13 @@ local function get_enemy_candidates_near_player(
 			local other_char = other_player.Character
 			if other_char and is_alive(other_char) then
 				local r = get_root(other_char)
-				if r then
+				local can_target = not pvp_service
+					or not pvp_service.can_damage
+					or pvp_service.can_damage(
+						player.UserId,
+						other_char
+					)
+				if r and can_target then
 					local dist = (r.Position - player_pos).Magnitude
 					if dist <= AGGRO_RANGE then
 						table.insert(candidates, other_char)
@@ -469,7 +476,13 @@ local function get_enemy_candidates_near_player(
 				for _, u in ipairs(other_units) do
 					if u and u.Parent ~= nil and is_alive(u) then
 						local r = get_root(u)
-						if r then
+						local can_target = not pvp_service
+							or not pvp_service.can_damage
+							or pvp_service.can_damage(
+								player.UserId,
+								u
+							)
+						if r and can_target then
 							local dist = (r.Position - player_pos).Magnitude
 							if dist <= AGGRO_RANGE then
 								table.insert(candidates, u)
@@ -581,12 +594,28 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 		cooldown = 1.0
 	end
 
+	local owner_user_id = attacker:GetAttribute("ArmyOwnerUserId")
+	if typeof(owner_user_id) == "number"
+		and pvp_service
+		and pvp_service.can_damage
+		and not pvp_service.can_damage(owner_user_id, target)
+	then
+		return
+	end
+
 	local t = now()
 	if (t - s.last_attack) < cooldown then
 		return
 	end
 
 	s.last_attack = t
+
+	if typeof(owner_user_id) == "number"
+		and pvp_service
+		and pvp_service.register_damage
+	then
+		pvp_service.register_damage(owner_user_id, target)
+	end
 
 	-- Important: mark who got the last hit BEFORE applying damage.
 	stamp_last_hit_owner(attacker, target)
@@ -2100,8 +2129,12 @@ local function tick_player(player: Player)
 	end
 end
 
-function ArmyAIService.init(army_service_module)
+function ArmyAIService.init(
+	army_service_module,
+	pvp_service_ref: any?
+)
 	army_service = army_service_module
+	pvp_service = pvp_service_ref
 end
 
 function ArmyAIService.start()
