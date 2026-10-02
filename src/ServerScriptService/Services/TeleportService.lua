@@ -263,7 +263,6 @@ end
 
 local function on_player_removing(player: Player)
 	next_token(player.UserId)
-	backpack_service.clear_backpack(player)
 end
 
 function TeleportService.init(

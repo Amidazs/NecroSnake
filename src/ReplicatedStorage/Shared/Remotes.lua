@@ -74,5 +74,9 @@ function Remotes.formation_profile(): RemoteEvent
 	return Remotes.get_or_create_event("FormationProfile")
 end
 
+function Remotes.soul_collection(): RemoteEvent
+	return Remotes.get_or_create_event("SoulCollection")
+end
+
 
 return Remotes

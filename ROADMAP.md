@@ -402,28 +402,65 @@ Work:
 
 ## Phase 5 - Permanent collection, Masters and cloning
 
+**Status:** COMPLETE - permanent collection, Masters, cloning, offline
+production, upgrades and Master-risk acceptance GREEN on 2 October 2026.
+
 **Goal:** create long-term ownership without removing battlefield risk.
 
 Work:
-- DataStore-backed individual unit collection.
-- Master/Soul Imprint records.
-- Put unit into cloning chamber.
-- Remove Master from chamber and risk it.
-- Soul Essence/resource economy.
-- Clone timers.
-- Offline production.
-- Machine output caps.
-- Multiple machine support.
-- Base machine upgrades.
-- Exact preservation of template/size/trait/evolution/ability data.
-- Safe save/retry/versioning strategy.
+- [x] DataStore-backed individual unit collection.
+- [x] Master/Soul Imprint records.
+- [x] Put unit into cloning chamber.
+- [x] Remove Master from chamber and risk it.
+- [x] Soul Essence/resource economy.
+- [x] Clone timers.
+- [x] Offline production.
+- [x] Machine output caps.
+- [x] Multiple machine support.
+- [x] Base machine upgrades.
+- [x] Exact preservation of template/size/trait/evolution/ability data.
+- [x] Safe save/retry/versioning strategy.
 
 **Acceptance:**
-- Extracted unit can become a permanent Master.
-- Player can leave the game and return without losing the Master.
-- Cloning progresses offline only while allowed by resource/storage rules.
-- Player can deploy a clone and lose it without deleting the Master.
-- Player can deliberately remove and permanently risk the Master.
+- [x] Extracted unit can become a permanent Master.
+- [x] Player can leave and return without losing the Master.
+- [x] Cloning progresses offline only while resource/storage rules allow it.
+- [x] Player can deploy a clone and lose it without deleting the Master.
+- [x] Player can deliberately remove and permanently risk the Master.
+
+**2 October 2026 Phase 5 playtest evidence:**
+- Added versioned individual unit records with unique IDs, exact template,
+  size, trait, evolution, ability, provenance and command-cost data.
+- Added the persistent Soul Vault and Master/Soul Imprint collection. Extracted
+  units can be imprinted as Masters or dissolved into Soul Essence.
+- Added a Soul Foundry UI in the Sanctum with Vault, Masters and Machines
+  pages. The normal Backpack/army-manager UI continues to use the same
+  persistent deployable-unit records.
+- Starter-loan anti-farming was validated from a clean profile: five attempted
+  starter extractions stored exactly three permanent starter units.
+- A Giant Tough Skeleton Knight with the Stormcharged evolution and two
+  abilities was imprinted, saved, reloaded and used as a cloning Master
+  without losing any identity fields.
+- Simulated offline elapsed time filled the level-1 machine to its exact 3/3
+  output cap. Collecting produced exactly three clones, all retaining the
+  Master's evolution, abilities and provenance.
+- Soul Essence is consumed by production. Full output storage or insufficient
+  resources pauses production instead of generating beyond allowed limits.
+- Base level 2 created a second independent cloning machine. A level-2 machine
+  upgrade and the second machine assignment both survived profile reload.
+- Losing a deployed clone left its Master intact.
+- Deliberately moving a Master out of Soul Imprint storage, deploying it and
+  killing it removed that Master permanently.
+- A different at-risk Master that survived deployment was extracted and
+  correctly returned to safe Master storage with its evolution/ability data.
+- The save layer uses a versioned DataStore profile, UpdateAsync revision
+  checks and retry/backoff. When cloud DataStore access is unavailable in
+  Studio, the same schema uses a session fallback so save/load and offline
+  catch-up behaviour can still be exercised without mutating live data.
+- A final clean runtime with all test harnesses removed loaded the Soul
+  Collection, Backpack, formation, PvP and teleport systems without runtime
+  errors. The Soul Foundry UI appeared in the Sanctum alongside the existing
+  teleport and backpack UI.
 
 ## Phase 6 - Necromancer levels, capacity, skills and Rebirth
 
@@ -574,19 +611,18 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 5: permanent collection, Masters and cloning.**
+**Begin Phase 6: Necromancer levels, capacity, skills and Rebirth.**
 
-Phase 4's PvP risk loop is now technically closed. The next milestone is to
-turn successfully extracted battlefield gains into persistent long-term
-ownership without removing the risk of losing deployed clones or deliberately
-risked Masters.
+Phase 5 now provides the persistent ownership layer that Phase 6 progression
+can build on. The next milestone is to make Necromancer growth expand tactical
+options without making veteran PvP automatically unbeatable.
 
-The first Phase 5 slice is the persistence foundation:
-1. Define the versioned per-unit persistent record.
-2. Persist extracted units separately from deployed battlefield state.
-3. Add Master / Soul Imprint registration.
-4. Add one cloning chamber with resource cost, timer and finite output.
-5. Make clone production resumable across sessions.
-6. Validate that a deployed clone can be lost without deleting its Master.
-7. Validate that deliberately deploying the Master itself can permanently lose
-   that Master when recovery fails.
+The first Phase 6 slice is:
+1. Add persistent Necromancer XP and level records.
+2. Drive Command Capacity from level/progression rather than test attributes.
+3. Add Raise proficiency progression without allowing guaranteed rare Raises.
+4. Add weighted capacity rules for larger/elite units.
+5. Add the three-slot Necromancer skill loadout and Base-only editing.
+6. Implement the first active skill set and server-side validation.
+7. Add the Rebirth record/reward loop with option/prestige-focused rewards.
+8. Run small-army versus progressed-army PvP checks before accepting the phase.

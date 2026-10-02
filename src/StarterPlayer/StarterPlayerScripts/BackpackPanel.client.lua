@@ -22,9 +22,16 @@ local DEBUG = false
 local GUI_NAME = "NecroBackpackGui"
 
 type UnitSnapshot = {
+	record_id: string?,
 	template_name: string,
 	size_tier: string?,
 	trait: string?,
+	evolution_id: string?,
+	ability_ids: { string }?,
+	source_master_id: string?,
+	deployed_master_id: string?,
+	acquisition_kind: string?,
+	command_cost: number?,
 }
 
 type StackedEntry = {
@@ -32,6 +39,9 @@ type StackedEntry = {
 	template_name: string,
 	size_tier: string?,
 	trait: string?,
+	evolution_id: string?,
+	ability_ids: { string }?,
+	deployed_master_id: string?,
 	total_count: number,
 }
 
@@ -41,10 +51,15 @@ local function dprint(msg: string)
 	end
 end
 
-local function unit_key(
-	u: { template_name: string, size_tier: string?, trait: string? }
-): string
-	return table.concat({ u.template_name, u.size_tier or "", u.trait or "" }, "|")
+local function unit_key(u: UnitSnapshot): string
+	return table.concat({
+		u.template_name,
+		u.size_tier or "",
+		u.trait or "",
+		u.evolution_id or "",
+		table.concat(u.ability_ids or {}, ","),
+		u.deployed_master_id or "",
+	}, "|")
 end
 
 -- =========================
@@ -178,6 +193,12 @@ local function display_name(entry: StackedEntry): string
 	if entry.trait and entry.trait ~= "" and entry.trait ~= "None" then
 		name = entry.trait .. " " .. name
 	end
+	if entry.evolution_id and entry.evolution_id ~= "" then
+		name ..= " [" .. entry.evolution_id .. "]"
+	end
+	if entry.deployed_master_id then
+		name = "MASTER AT RISK: " .. name
+	end
 	return name
 end
 
@@ -192,6 +213,9 @@ local function stack_units(units: { UnitSnapshot }): { StackedEntry }
 				template_name = u.template_name,
 				size_tier = u.size_tier,
 				trait = u.trait,
+				evolution_id = u.evolution_id,
+				ability_ids = u.ability_ids,
+				deployed_master_id = u.deployed_master_id,
 				total_count = 0,
 			}
 		end

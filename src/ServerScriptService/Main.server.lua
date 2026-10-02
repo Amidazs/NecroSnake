@@ -42,6 +42,14 @@ local BackpackService = require(
 	ServicesFolder:WaitForChild("BackpackService")
 )
 
+local UnitRecordService = require(
+	ServicesFolder:WaitForChild("UnitRecordService")
+)
+
+local SoulCollectionService = require(
+	ServicesFolder:WaitForChild("SoulCollectionService")
+)
+
 local FormationProfileService = require(
 	ServicesFolder:WaitForChild("FormationProfileService")
 )
@@ -108,17 +116,28 @@ local function main()
 	Remotes.necromancy_result()
 	Remotes.banish_request()
 	Remotes.formation_profile()
+	Remotes.soul_collection()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")
 
 	-- Start services
+	ModelLibraryService.init()
+	SoulCollectionService.init(
+		ModelLibraryService,
+		UnitRecordService
+	)
+	SoulCollectionService.start()
+	BackpackService.init(SoulCollectionService)
 	BackpackService.start()
 
-	ModelLibraryService.init()
 	FormationProfileService.init(ModelLibraryService)
 	FormationProfileService.start()
-	ArmyService.init(ModelLibraryService, FormationProfileService)
+	ArmyService.init(
+		ModelLibraryService,
+		FormationProfileService,
+		UnitRecordService
+	)
 	PvPService.init(ArmyService)
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)

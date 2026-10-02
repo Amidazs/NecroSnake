@@ -1,5 +1,4 @@
 --!strict
--- BackpackService.lua
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,116 +8,177 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local BackpackService = {}
 
 export type UnitSnapshot = {
+	record_id: string?,
 	template_name: string,
 	size_tier: string?,
 	trait: string?,
+	evolution_id: string?,
+	ability_ids: { string }?,
+	source_master_id: string?,
+	deployed_master_id: string?,
+	acquisition_kind: string?,
+	command_cost: number?,
 }
 
 export type LoadoutCounts = { [string]: number }
 
-local backpack_by_user_id: { [number]: { UnitSnapshot } } = {}
+local collection_service = nil :: any
 local loadout_by_user_id: { [number]: LoadoutCounts } = {}
-
 local did_start = false
 
 local function log(message: string)
 	print("[BackpackService] " .. message)
 end
 
-local function clear_for_user_id(user_id: number)
-	backpack_by_user_id[user_id] = nil
-	loadout_by_user_id[user_id] = nil
-end
-
-local function get_or_create_backpack(user_id: number): { UnitSnapshot }
-	local existing = backpack_by_user_id[user_id]
-	if existing then
-		return existing
+local function get_units(player: Player): { UnitSnapshot }
+	if not collection_service
+		or not collection_service.get_deployable_units
+	then
+		return {}
 	end
-
-	local fresh: { UnitSnapshot } = {}
-	backpack_by_user_id[user_id] = fresh
-	return fresh
-end
-
-local function unit_key(u: UnitSnapshot): string
-	return table.concat({
-		u.template_name,
-		u.size_tier or "",
-		u.trait or "",
-	}, "|")
+	return collection_service.get_deployable_units(player)
 end
 
 local function fire_update(player: Player)
-	local snapshot = get_or_create_backpack(player.UserId)
-	Remotes.backpack_update():FireClient(player, snapshot)
+	Remotes.backpack_update():FireClient(
+		player,
+		get_units(player)
+	)
+end
+
+local function copy_loadout(
+	raw: any
+): LoadoutCounts
+	local copied: LoadoutCounts = {}
+	if typeof(raw) ~= "table" then
+		return copied
+	end
+
+	for key, value in pairs(raw) do
+		if typeof(key) == "string"
+			and typeof(value) == "number"
+			and value > 0
+		then
+			copied[key] = math.floor(value)
+		end
+	end
+	return copied
+end
+
+local function hook_player(player: Player)
+	player:GetAttributeChangedSignal(
+		"SoulProfileLoaded"
+	):Connect(function()
+		if player:GetAttribute("SoulProfileLoaded") == true then
+			fire_update(player)
+		end
+	end)
+
+	if player:GetAttribute("SoulProfileLoaded") == true then
+		task.defer(fire_update, player)
+	end
 end
 
 local function on_backpack_request(player: Player)
 	fire_update(player)
 end
 
-local function on_set_loadout(player: Player, loadout_counts: LoadoutCounts)
-	-- Copy the table so client mutations cannot affect server state by reference.
-	local copied: LoadoutCounts = {}
-	for key, value in pairs(loadout_counts) do
-		if typeof(key) == "string" and typeof(value) == "number" then
-			copied[key] = math.floor(value)
-		end
-	end
-	loadout_by_user_id[player.UserId] = copied
+local function on_set_loadout(
+	player: Player,
+	loadout_counts: any
+)
+	loadout_by_user_id[player.UserId] = copy_loadout(
+		loadout_counts
+	)
+end
+
+function BackpackService.init(collection_service_ref: any)
+	collection_service = collection_service_ref
 end
 
 function BackpackService.start()
 	if did_start then
 		return
 	end
-
 	did_start = true
 
-	Players.PlayerRemoving:Connect(function(player: Player)
-		clear_for_user_id(player.UserId)
+	for _, player in ipairs(Players:GetPlayers()) do
+		hook_player(player)
+	end
+
+	Players.PlayerAdded:Connect(hook_player)
+	Players.PlayerRemoving:Connect(function(player)
+		loadout_by_user_id[player.UserId] = nil
 	end)
 
-	Remotes.backpack_request().OnServerEvent:Connect(on_backpack_request)
-	Remotes.backpack_set_loadout().OnServerEvent:Connect(on_set_loadout)
+	Remotes.backpack_request().OnServerEvent:Connect(
+		on_backpack_request
+	)
+	Remotes.backpack_set_loadout().OnServerEvent:Connect(
+		on_set_loadout
+	)
 
 	log("Ready.")
 end
 
-function BackpackService.set_backpack(player: Player, snapshot: { UnitSnapshot })
-	backpack_by_user_id[player.UserId] = snapshot
-	fire_update(player)
-end
-
-function BackpackService.store_snapshot_append(player: Player, snapshot: { UnitSnapshot })
-	local backpack = get_or_create_backpack(player.UserId)
-
-	for _, unit in ipairs(snapshot) do
-		table.insert(backpack, unit)
+function BackpackService.set_backpack(
+	player: Player,
+	snapshot: { UnitSnapshot }
+)
+	if not collection_service then
+		return
 	end
 
+	collection_service.clear_deployable_units(player)
+	collection_service.append_extracted_units(
+		player,
+		snapshot
+	)
 	fire_update(player)
 end
 
-function BackpackService.get_backpack(player: Player): { UnitSnapshot }?
-	return backpack_by_user_id[player.UserId]
+function BackpackService.store_snapshot_append(
+	player: Player,
+	snapshot: { UnitSnapshot }
+)
+	if not collection_service then
+		return
+	end
+
+	collection_service.append_extracted_units(
+		player,
+		snapshot
+	)
+	fire_update(player)
+end
+
+function BackpackService.get_backpack(
+	player: Player
+): { UnitSnapshot }
+	return get_units(player)
 end
 
 function BackpackService.has_units(player: Player): boolean
-	local snapshot = backpack_by_user_id[player.UserId]
-	return snapshot ~= nil and #snapshot > 0
+	return #get_units(player) > 0
 end
 
-function BackpackService.take_backpack(player: Player): { UnitSnapshot }?
-	local snapshot = backpack_by_user_id[player.UserId]
-	backpack_by_user_id[player.UserId] = nil
+function BackpackService.take_backpack(
+	player: Player
+): { UnitSnapshot }?
+	if not collection_service then
+		return nil
+	end
+
+	local snapshot =
+		collection_service.take_all_deployable_units(player)
 	fire_update(player)
 	return snapshot
 end
 
 function BackpackService.clear_backpack(player: Player)
-	clear_for_user_id(player.UserId)
+	if collection_service then
+		collection_service.clear_deployable_units(player)
+	end
 	fire_update(player)
 end
 
@@ -126,87 +186,60 @@ function BackpackService.push_update(player: Player)
 	fire_update(player)
 end
 
-function BackpackService.get_loadout_counts(player: Player): LoadoutCounts?
+function BackpackService.get_loadout_counts(
+	player: Player
+): LoadoutCounts?
 	return loadout_by_user_id[player.UserId]
 end
 
--- ✅ NEW: Remove up to `count` units matching the exact key.
 function BackpackService.remove_units_by_key(
 	player: Player,
 	key: string,
 	count: number
 ): number
-	if count <= 0 then
+	if not collection_service then
 		return 0
 	end
 
-	local backpack = get_or_create_backpack(player.UserId)
-	local removed = 0
-	local kept: { UnitSnapshot } = {}
-
-	for _, u in ipairs(backpack) do
-		if removed < count and unit_key(u) == key then
-			removed += 1
-		else
-			table.insert(kept, u)
-		end
-	end
-
-	backpack_by_user_id[player.UserId] = kept
+	local removed = collection_service.remove_units_by_key(
+		player,
+		key,
+		count
+	)
 	fire_update(player)
-
 	return removed
 end
 
--- ✅ NEW: Add units to backpack (append).
-function BackpackService.add_units(player: Player, units: { UnitSnapshot })
-	local backpack = get_or_create_backpack(player.UserId)
-
-	for _, u in ipairs(units) do
-		table.insert(backpack, u)
+function BackpackService.add_units(
+	player: Player,
+	units: { UnitSnapshot }
+)
+	if collection_service then
+		collection_service.append_extracted_units(
+			player,
+			units
+		)
 	end
-
 	fire_update(player)
 end
 
+function BackpackService.take_loadout_units(
+	player: Player
+): { UnitSnapshot }?
+	if not collection_service then
+		return nil
+	end
 
--- ✅ NEW: Remove units matching the player's loadout selection and return them.
--- This keeps remaining units in the backpack so they are not lost.
-function BackpackService.take_loadout_units(player: Player): { UnitSnapshot }?
 	local counts = loadout_by_user_id[player.UserId]
 	if not counts then
 		return nil
 	end
 
-	local backpack = get_or_create_backpack(player.UserId)
-	local selected: { UnitSnapshot } = {}
-	local kept: { UnitSnapshot } = {}
-
-	local remaining_by_key: { [string]: number } = {}
-	for key, count in pairs(counts) do
-		if typeof(key) == "string" and typeof(count) == "number" and count > 0 then
-			remaining_by_key[key] = math.floor(count)
-		end
-	end
-
-	for _, unit in ipairs(backpack) do
-		local key = unit_key(unit)
-		local remaining = remaining_by_key[key]
-		if remaining and remaining > 0 then
-			table.insert(selected, unit)
-			remaining_by_key[key] = remaining - 1
-		else
-			table.insert(kept, unit)
-		end
-	end
-
-	backpack_by_user_id[player.UserId] = kept
+	local selected = collection_service.take_units_by_counts(
+		player,
+		counts
+	)
 	fire_update(player)
-
-	if #selected == 0 then
-		return nil
-	end
-
 	return selected
 end
 

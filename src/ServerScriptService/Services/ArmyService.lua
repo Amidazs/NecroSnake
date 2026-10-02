@@ -17,6 +17,7 @@ local ArmyService = {}
 
 local model_library_service = nil :: any
 local formation_profile_service = nil :: any
+local unit_record_service = nil :: any
 local did_init = false
 
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
@@ -66,9 +67,16 @@ type ArmyUnit = {
 }
 
 export type UnitSnapshot = {
+	record_id: string?,
 	template_name: string,
 	size_tier: string?,
 	trait: string?,
+	evolution_id: string?,
+	ability_ids: { string }?,
+	source_master_id: string?,
+	deployed_master_id: string?,
+	acquisition_kind: string?,
+	command_cost: number?,
 }
 
 local player_armies_folder: Folder? = nil
@@ -370,18 +378,21 @@ local function spawn_one_unit(
 end
 
 local function summon_starter_units(player: Player)
-	-- Always spawn exactly 3 NORMAL Skeletons for the player.
 	local overrides: SpawnOverrides = {
 		force_size_tier = "Normal",
 		force_trait = "None",
 	}
 
-	ArmyService.summon_units(
+	local spawned = ArmyService.summon_units(
 		player,
 		DEFAULT_STARTER_TEMPLATE,
 		DEFAULT_STARTER_COUNT,
 		overrides
 	)
+
+	for _, model in ipairs(spawned) do
+		model:SetAttribute("AcquisitionKind", "StarterLoan")
+	end
 end
 
 local function compute_rarity_scaled_raise_chance(
@@ -512,9 +523,14 @@ function ArmyService.banish_unit(player: Player, model: Model): (boolean, string
 	return true, "Unit banished. Command Capacity freed."
 end
 
-function ArmyService.init(model_library, formation_profile_service_ref: any?)
+function ArmyService.init(
+	model_library,
+	formation_profile_service_ref: any?,
+	unit_record_service_ref: any?
+)
 	model_library_service = model_library
 	formation_profile_service = formation_profile_service_ref
+	unit_record_service = unit_record_service_ref
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)
@@ -703,26 +719,38 @@ end
 
 -- NEW: Convert the player's current spawned army into a "backpack snapshot"
 -- and remove the units from the world (so nothing can fight/follow into SafeZone).
-function ArmyService.snapshot_and_clear_army(player: Player): { UnitSnapshot }
+function ArmyService.snapshot_and_clear_army(
+	player: Player
+): { UnitSnapshot }
 	local list = armies_by_user_id[player.UserId] or {}
 	local snapshot: { UnitSnapshot } = {}
 
-	for _, u in ipairs(list) do
-		local model = u.model
+	for _, unit in ipairs(list) do
+		local model = unit.model
 		if model and model.Parent ~= nil then
-			local template_name = read_string_attr(model, ATTR_TEMPLATE_NAME)
-			if not template_name then
-				template_name = model.Name
+			if unit_record_service
+				and unit_record_service.from_model
+			then
+				table.insert(
+					snapshot,
+					unit_record_service.from_model(model)
+				)
+			else
+				table.insert(snapshot, {
+					template_name = read_string_attr(
+						model,
+						ATTR_TEMPLATE_NAME
+					) or model.Name,
+					size_tier = read_string_attr(
+						model,
+						ATTR_SIZE_TIER
+					),
+					trait = read_string_attr(
+						model,
+						ATTR_TRAIT
+					),
+				})
 			end
-
-			local size_tier = read_string_attr(model, ATTR_SIZE_TIER)
-			local trait = read_string_attr(model, ATTR_TRAIT)
-
-			table.insert(snapshot, {
-				template_name = template_name,
-				size_tier = size_tier,
-				trait = trait,
-			})
 		end
 	end
 
@@ -747,9 +775,19 @@ function ArmyService.spawn_from_snapshot(
 			}
 		end
 
-		local models = ArmyService.summon_units(player, s.template_name, 1, overrides)
-		for _, m in ipairs(models) do
-			table.insert(spawned, m)
+		local models = ArmyService.summon_units(
+			player,
+			s.template_name,
+			1,
+			overrides
+		)
+		for _, model in ipairs(models) do
+			if unit_record_service
+				and unit_record_service.apply_to_model
+			then
+				unit_record_service.apply_to_model(model, s)
+			end
+			table.insert(spawned, model)
 		end
 	end
 
@@ -835,6 +873,25 @@ function ArmyService.try_raise_dead(
 			maximum
 		)
 		return false, "SPAWN_FAILED", chance, cost
+	end
+
+	if unit_record_service
+		and unit_record_service.from_model
+		and unit_record_service.make_captured
+		and unit_record_service.apply_to_model
+	then
+		local old_record = unit_record_service.from_model(
+			dead_model
+		)
+		local captured = unit_record_service.make_captured(
+			old_record
+		)
+		if captured then
+			unit_record_service.apply_to_model(
+				spawned,
+				captured
+			)
+		end
 	end
 
 	if dead_model.Parent ~= nil then
