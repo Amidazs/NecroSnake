@@ -176,6 +176,7 @@ local APPROACH_RADIUS_MARGIN = 0.6
 type UnitState = {
 	target: Model?,
 	last_attack: number,
+	last_support: number,
 
 	last_move_goal: Vector3?,
 	last_move_time: number,
@@ -370,6 +371,7 @@ local function get_or_create_state(unit_model: Model): UnitState
 	local created: UnitState = {
 		target = nil,
 		last_attack = 0,
+		last_support = 0,
 
 		last_move_goal = nil,
 		last_move_time = 0,
@@ -573,6 +575,104 @@ local function stamp_last_hit_owner(attacker: Model, target: Model)
 	target:SetAttribute("LastDamageSourceKind", "PLAYER_ARMY")
 	target:SetAttribute("LastHitOwnerUserId", owner_user_id)
 	target:SetAttribute("LastHitTime", now())
+end
+
+--[[
+	Returns movement scaling supplied by a faction combat role.
+
+	Args:
+		model (Model): Unit whose role speed is requested.
+
+	Returns:
+		number: Safe movement multiplier.
+]]
+local function get_role_speed_multiplier(model: Model): number
+	local value = model:GetAttribute("RoleSpeedMultiplier")
+	if typeof(value) ~= "number" then
+		return 1
+	end
+	return clamp(value, 0.75, 1.25)
+end
+
+--[[
+	Applies army speed while preserving role identity.
+
+	Args:
+		model (Model): Unit being moved.
+		humanoid (Humanoid): Unit Humanoid.
+		base_speed (number): Formation movement speed.
+
+	Returns:
+		None.
+]]
+local function set_role_walk_speed(
+	model: Model,
+	humanoid: Humanoid,
+	base_speed: number
+)
+	humanoid.WalkSpeed = base_speed
+		* get_role_speed_multiplier(model)
+end
+
+--[[
+	Runs a support pulse for a Raised support unit.
+
+	Args:
+		unit_model (Model): Potential support unit.
+		alive_units ({ Model }): Owner's living army.
+		state (UnitState): Unit AI state.
+
+	Returns:
+		None.
+]]
+local function pulse_owned_support(
+	unit_model: Model,
+	alive_units: { Model },
+	state: UnitState
+)
+	if unit_model:GetAttribute("CombatRole") ~= "Support" then
+		return
+	end
+
+	local heal = unit_model:GetAttribute("SupportHealAmount")
+	local radius = unit_model:GetAttribute("SupportHealRadius")
+	local cooldown = unit_model:GetAttribute(
+		"SupportHealCooldown"
+	)
+	if typeof(heal) ~= "number"
+		or typeof(radius) ~= "number"
+	then
+		return
+	end
+	if typeof(cooldown) ~= "number" then
+		cooldown = 3
+	end
+
+	local current_time = now()
+	if current_time - state.last_support < cooldown then
+		return
+	end
+	state.last_support = current_time
+
+	local root = get_root(unit_model)
+	if not root then
+		return
+	end
+	for _, ally in ipairs(alive_units) do
+		local ally_root = get_root(ally)
+		local ally_humanoid = get_humanoid(ally)
+		if ally_root and ally_humanoid
+			and ally_humanoid.Health > 0
+			and ally_humanoid.Health < ally_humanoid.MaxHealth
+			and (ally_root.Position - root.Position).Magnitude
+				<= radius
+		then
+			ally_humanoid.Health = math.min(
+				ally_humanoid.MaxHealth,
+				ally_humanoid.Health + heal
+			)
+		end
+	end
 end
 
 local function try_attack(attacker: Model, target: Model, s: UnitState)
@@ -1693,7 +1793,11 @@ local function tick_commanded_mode(
 				continue
 			end
 
-			humanoid.WalkSpeed = desired_speed
+			set_role_walk_speed(
+			unit_model,
+			humanoid,
+			desired_speed
+		)
 			local state = get_or_create_state(unit_model)
 			state.target = nil
 
@@ -1765,7 +1869,11 @@ local function tick_commanded_mode(
 				continue
 			end
 
-			humanoid.WalkSpeed = retreat_speed
+			set_role_walk_speed(
+				unit_model,
+				humanoid,
+				retreat_speed
+			)
 			local state = get_or_create_state(unit_model)
 			state.target = nil
 
@@ -1840,7 +1948,11 @@ local function tick_commanded_mode(
 				continue
 			end
 
-			humanoid.WalkSpeed = desired_speed
+			set_role_walk_speed(
+			unit_model,
+			humanoid,
+			desired_speed
+		)
 			local state = get_or_create_state(unit_model)
 			local meta = cohort_meta[unit_model]
 			local cohort = meta and meta.cohort or get_unit_cohort(unit_model)
@@ -2042,6 +2154,14 @@ local function tick_player(player: Player)
 		return
 	end
 
+	for _, unit_model in ipairs(alive_units) do
+		pulse_owned_support(
+			unit_model,
+			alive_units,
+			get_or_create_state(unit_model)
+		)
+	end
+
 	if tick_commanded_mode(
 		player,
 		alive_units,
@@ -2084,7 +2204,11 @@ local function tick_player(player: Player)
 			continue
 		end
 
-		u_hum.WalkSpeed = desired_speed
+		set_role_walk_speed(
+			unit_model,
+			u_hum,
+			desired_speed
+		)
 
 		local s = get_or_create_state(unit_model)
 

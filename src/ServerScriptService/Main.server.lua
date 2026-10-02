@@ -14,6 +14,10 @@ local ModelLibraryService = require(
 	ServicesFolder:WaitForChild("ModelLibraryService")
 )
 
+local FactionService = require(
+	ServicesFolder:WaitForChild("FactionService")
+)
+
 local ArmyService = require(
 	ServicesFolder:WaitForChild("ArmyService")
 )
@@ -148,7 +152,8 @@ local function main()
 	ArmyService.init(
 		ModelLibraryService,
 		FormationProfileService,
-		UnitRecordService
+		UnitRecordService,
+		FactionService
 	)
 	PvPService.init(
 		ArmyService,
@@ -157,7 +162,11 @@ local function main()
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
-	NPCService.init(ModelLibraryService, ArmyService)
+	NPCService.init(
+		ModelLibraryService,
+		ArmyService,
+		FactionService
+	)
 	CombatService.init(
 		ArmyService,
 		PvPService,

@@ -18,6 +18,7 @@ local ArmyService = {}
 local model_library_service = nil :: any
 local formation_profile_service = nil :: any
 local unit_record_service = nil :: any
+local faction_service = nil :: any
 local did_init = false
 
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
@@ -76,6 +77,9 @@ export type UnitSnapshot = {
 	source_master_id: string?,
 	deployed_master_id: string?,
 	acquisition_kind: string?,
+	faction_id: string?,
+	combat_role: string?,
+	faction_rarity: string?,
 	command_cost: number?,
 }
 
@@ -157,7 +161,8 @@ local function pick_random_ground_position(): Vector3
 		local result = Workspace:Raycast(origin, direction, params)
 		if result then
 			local hit_terrain = result.Instance:IsA("Terrain")
-			local hit_floor = result.Instance:IsA("BasePart") and result.Instance.CanCollide
+			local hit_floor = result.Instance:IsA("BasePart")
+				and result.Instance.CanCollide
 
 			if (hit_terrain or hit_floor)
 				and (not hit_terrain or result.Material ~= Enum.Material.Water) then
@@ -327,8 +332,9 @@ local function spawn_one_unit(
 	end
 	model:SetAttribute("Cohort", cohort)
 
-	spawn_index_by_user_id[player.UserId] = (spawn_index_by_user_id[player.UserId] or 0)
-		+ 1
+	local previous_spawn_index = spawn_index_by_user_id[player.UserId]
+		or 0
+	spawn_index_by_user_id[player.UserId] = previous_spawn_index + 1
 	model:SetAttribute("ArmyUnitId", spawn_index_by_user_id[player.UserId])
 
 	if model_library_service.set_units_collision then
@@ -408,7 +414,8 @@ local function compute_rarity_scaled_raise_chance(
 	local normal_weight = SIZE_WEIGHTS.Normal or 1
 	local none_weight = TRAIT_WEIGHTS.None or 1
 
-	local rarity_factor = (size_weight * trait_weight) / (normal_weight * none_weight)
+	local rarity_factor = (size_weight * trait_weight)
+		/ (normal_weight * none_weight)
 
 	local chance = BASE_RAISE_CHANCE * rarity_factor
 	return clamp(chance, MIN_RAISE_CHANCE, MAX_RAISE_CHANCE)
@@ -425,7 +432,10 @@ end
 local DEFAULT_COMMAND_CAPACITY = 5
 local MAX_RAISE_CHANCE_FROM_PROGRESSION = 0.95
 
-local function get_unit_command_cost(template_name: string, size_tier: string?): number
+local function get_unit_command_cost(
+	template_name: string,
+	size_tier: string?
+): number
 	local stats = nil
 	if model_library_service and model_library_service.get_unit_stats then
 		stats = model_library_service.get_unit_stats(template_name)
@@ -449,7 +459,10 @@ local function get_model_command_cost(model: Model): number
 		return math.max(1, math.floor(attr))
 	end
 
-	local template_name = read_string_attr(model, ATTR_TEMPLATE_NAME) or model.Name
+	local template_name = read_string_attr(
+		model,
+		ATTR_TEMPLATE_NAME
+	) or model.Name
 	local size_tier = read_string_attr(model, ATTR_SIZE_TIER)
 	return get_unit_command_cost(template_name, size_tier)
 end
@@ -498,14 +511,20 @@ function ArmyService.refresh_command_capacity(player: Player)
 	)
 end
 
-function ArmyService.can_add_model(player: Player, model: Model): (boolean, number, number, number)
+function ArmyService.can_add_model(
+	player: Player,
+	model: Model
+): (boolean, number, number, number)
 	local cost = get_model_command_cost(model)
 	local used = ArmyService.get_used_command_capacity(player)
 	local maximum = ArmyService.get_command_capacity(player)
 	return used + cost <= maximum, cost, used, maximum
 end
 
-function ArmyService.banish_unit(player: Player, model: Model): (boolean, string)
+function ArmyService.banish_unit(
+	player: Player,
+	model: Model
+): (boolean, string)
 	if model:GetAttribute("ArmyOwnerUserId") ~= player.UserId then
 		return false, "That unit is not part of your army."
 	end
@@ -513,7 +532,10 @@ function ArmyService.banish_unit(player: Player, model: Model): (boolean, string
 		return false, "That unit no longer exists."
 	end
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 or model:GetAttribute("IsNecroCorpse") == true then
+	if not humanoid
+		or humanoid.Health <= 0
+		or model:GetAttribute("IsNecroCorpse") == true
+	then
 		return false, "Dead units cannot be Banished."
 	end
 
@@ -526,11 +548,13 @@ end
 function ArmyService.init(
 	model_library,
 	formation_profile_service_ref: any?,
-	unit_record_service_ref: any?
+	unit_record_service_ref: any?,
+	faction_service_ref: any?
 )
 	model_library_service = model_library
 	formation_profile_service = formation_profile_service_ref
 	unit_record_service = unit_record_service_ref
+	faction_service = faction_service_ref
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)
@@ -718,7 +742,8 @@ function ArmyService.summon_units(
 end
 
 -- NEW: Convert the player's current spawned army into a "backpack snapshot"
--- and remove the units from the world (so nothing can fight/follow into SafeZone).
+-- and remove the units from the world so nothing can fight or follow
+-- into the SafeZone.
 function ArmyService.snapshot_and_clear_army(
 	player: Player
 ): { UnitSnapshot }
@@ -787,6 +812,11 @@ function ArmyService.spawn_from_snapshot(
 			then
 				unit_record_service.apply_to_model(model, s)
 			end
+			if faction_service
+				and faction_service.restore_identity
+			then
+				faction_service.restore_identity(model)
+			end
 			table.insert(spawned, model)
 		end
 	end
@@ -794,7 +824,10 @@ function ArmyService.spawn_from_snapshot(
 	return spawned
 end
 
-function ArmyService.get_raise_chance(player: Player, dead_model: Model): number
+function ArmyService.get_raise_chance(
+	player: Player,
+	dead_model: Model
+): number
 	local template_name = read_string_attr(dead_model, ATTR_TEMPLATE_NAME)
 		or DEFAULT_STARTER_TEMPLATE
 	local size_name = read_string_attr(dead_model, ATTR_SIZE_TIER) or "Normal"
@@ -833,7 +866,10 @@ function ArmyService.try_raise_dead(
 		return false, "INVALID", 0, 0
 	end
 
-	local can_add, cost, used, maximum = ArmyService.can_add_model(player, dead_model)
+	local can_add, cost, used, maximum = ArmyService.can_add_model(
+		player,
+		dead_model
+	)
 	local chance = ArmyService.get_raise_chance(player, dead_model)
 	if not can_add then
 		return false, "FULL", chance, cost
@@ -875,6 +911,12 @@ function ArmyService.try_raise_dead(
 		return false, "SPAWN_FAILED", chance, cost
 	end
 
+	if faction_service
+		and faction_service.copy_identity
+	then
+		faction_service.copy_identity(dead_model, spawned)
+	end
+
 	if unit_record_service
 		and unit_record_service.from_model
 		and unit_record_service.make_captured
@@ -891,6 +933,11 @@ function ArmyService.try_raise_dead(
 				spawned,
 				captured
 			)
+			if faction_service
+				and faction_service.restore_identity
+			then
+				faction_service.restore_identity(spawned)
+			end
 		end
 	end
 

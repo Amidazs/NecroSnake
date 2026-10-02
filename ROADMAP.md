@@ -532,20 +532,51 @@ Work:
 
 ## Phase 7 - Factions and army identity
 
-**Goal:** turn PvE into a source of strategically different army components.
+**Status:** COMPLETE - faction warfare, role identity and two-client
+composition acceptance GREEN on 2 October 2026.
+
+**Goal:** turn PvE into a source of strategically different army
+components.
 
 Work:
-- Multiple autonomous factions.
-- Faction-vs-faction conflicts.
-- Distinct unit roles: shields, spears, archers, cavalry, casters, brutes, support, etc.
-- Region/faction spawn identities.
-- Unit readability at distance.
-- Undead versions retain combat role.
-- Faction-specific rare/elites.
+- [x] Multiple autonomous factions.
+- [x] Faction-vs-faction conflicts.
+- [x] Distinct shields, spears, archers, cavalry, casters, brutes,
+  support, skirmishers and reavers.
+- [x] Region/faction spawn identities.
+- [x] Unit readability at distance.
+- [x] Raised undead retain faction and combat role.
+- [x] Faction-specific uncommon, elite and rare units.
 
 **Acceptance:**
-- Two players at the same capacity can deliberately build visibly different armies.
-- Watching an NPC faction battle should create useful corpse opportunities even without player initiation.
+- [x] Two players at the same capacity can deliberately build visibly
+  different armies.
+- [x] Autonomous faction battles create useful corpse opportunities
+  without player initiation.
+
+**2 October 2026 Phase 7 playtest evidence:**
+- Four regional factions now spawn from faction-specific rosters:
+  Ossuary Legion, Mirebound Brood, Ashen Covenant and Grave Court.
+- Natural runtime sampling produced all core combat roles, plus uncommon,
+  elite and rare faction units with faction/role visual markers.
+- Hostile factions now seek and fight each other rather than treating all
+  wild NPC groups as interchangeable prey.
+- A natural faction-war run created five player-independent battlefield
+  corpses. Every sampled corpse was immediately claimable and had a Raise
+  prompt while retaining faction and role identity.
+- The deterministic acceptance harness Raised a faction-battle corpse,
+  preserved faction/role identity, then preserved it again through the
+  backpack snapshot and restore path.
+- The earlier corpse rule remains intact: player-owned undead killed by
+  NPCs vanish immediately and cannot be Raised again.
+- Support units healed damaged faction allies during the live AI test.
+- Cavalry and Reaver elite identities were spawned and retained their
+  dedicated role visuals and combat attributes.
+- A real local-server test with two Studio clients passed at equal
+  12-point Command Capacity. One player used 8 units across
+  Shield/Archer/Support; the other used 6 units across
+  Brute/Cavalry/Skirmisher. Both armies used exactly 12 Command and all
+  units retained visible faction identity.
 
 ## Phase 8 - Boss ownership and elite encounters
 

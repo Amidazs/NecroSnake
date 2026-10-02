@@ -529,10 +529,31 @@ local function initialize_corpse(model: Model)
 		end
 	end
 
-	if model:GetAttribute("LastDamageSourceKind") == "NPC" then
+	local source_kind = model:GetAttribute(
+		"LastDamageSourceKind"
+	)
+	local faction_battle_corpse = false
+	if source_kind == "NPC" then
 		model:SetAttribute("NoRaiseReason", "NPC_KILL")
 		model:Destroy()
 		return
+	elseif source_kind == "NPC_FACTION" then
+		local victim_faction = model:GetAttribute("FactionId")
+		local killer_faction = model:GetAttribute(
+			"LastHitFactionId"
+		)
+		local is_wild = typeof(former_owner) ~= "number"
+			or former_owner <= 0
+		local hostile_factions = typeof(victim_faction) == "string"
+			and typeof(killer_faction) == "string"
+			and victim_faction ~= killer_faction
+		if not is_wild or not hostile_factions then
+			model:SetAttribute("NoRaiseReason", "NPC_KILL")
+			model:Destroy()
+			return
+		end
+		faction_battle_corpse = true
+		model:SetAttribute("FactionBattleCorpse", true)
 	end
 
 	local root = get_root(model)
@@ -549,9 +570,20 @@ local function initialize_corpse(model: Model)
 
 	model:SetAttribute(ATTR_CORPSE, true)
 	model:SetAttribute(ATTR_CORPSE_CREATED, created)
-	model:SetAttribute(ATTR_CORPSE_EXPIRES, created + CORPSE_LIFETIME_SECONDS)
+	model:SetAttribute(
+		ATTR_CORPSE_EXPIRES,
+		created + CORPSE_LIFETIME_SECONDS
+	)
 	model:SetAttribute(ATTR_CLAIM_USER_ID, claim_user_id)
-	model:SetAttribute(ATTR_CLAIM_EXPIRES, created + CLAIM_SECONDS)
+	model:SetAttribute(
+		ATTR_CLAIM_EXPIRES,
+		if faction_battle_corpse
+			then created
+			else created + CLAIM_SECONDS
+	)
+	if faction_battle_corpse then
+		model:SetAttribute("CorpseClaimOpen", true)
+	end
 	model:SetAttribute(ATTR_RAISE_FAILURES, 0)
 	model:SetAttribute(ATTR_MAX_RAISE_FAILURES, MAX_FAILED_RAISES)
 

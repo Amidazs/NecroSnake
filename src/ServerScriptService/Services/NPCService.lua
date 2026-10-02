@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ArrowTracerPool = require(Shared:WaitForChild("ArrowTracerPool"))
@@ -13,10 +14,12 @@ local NPCService = {}
 
 local model_library_service = nil :: any
 local army_service = nil :: any
+local faction_service = nil :: any
 local running = false
 local spawn_task: thread? = nil
 local ai_task: thread? = nil
 local cleanup_task: thread? = nil
+local ambient_spawning_enabled = true
 
 local GROUP_FOLDER_NAME = "NPCGroups"
 local NPC_FOLDER_NAME = "NPCs"
@@ -57,7 +60,7 @@ local NPC_COLLISION_GROUP = "NPC"
 local NPC_BOSS_COLLISION_GROUP = "NPCBoss"
 
 -- Movement / awareness
-local GROUP_SCAN_RANGE = 55
+local GROUP_SCAN_RANGE = 150
 local FEAR_RANGE = 35
 local WANDER_RADIUS = 28
 
@@ -69,25 +72,26 @@ local FLEE_COUNTERATTACK_RANGE = 10
 
 
 -- Targeting
-local TARGET_ACQUIRE_RANGE = 60
+local TARGET_ACQUIRE_RANGE = 85
 local TARGET_REEVAL_COOLDOWN = 2.0
 local ARMY_TARGET_SEARCH_RADIUS = 60
 local MELEE_STICK_RADIUS = 2.25
 
 
 -- Option C: leash (group stays within this of its spawn anchor)
-local GROUP_LEASH_RADIUS = 75
+local GROUP_LEASH_RADIUS = 95
 
 -- Flee logic (other groups + player army)
 local THREAT_SCAN_RANGE = 45
 local PLAYER_ARMY_THREAT_SCAN_RANGE = 55
 
--- Army only counts as a 'threat aura' when it is close enough to protect its owner.
--- This creates windows where NPCs will chase the player if the army drifts away.
+-- The army only counts as a threat aura when it is close enough
+-- to protect its owner. This creates windows where NPCs can chase
+-- an unguarded player if the army drifts away.
 local PLAYER_ARMY_PROTECT_RADIUS = 35
 
--- If a player is unguarded, groups may choose to hunt them even if no other NPC
--- prey exists.
+-- If a player is unguarded, groups may choose to hunt them even if
+-- no other NPC prey exists.
 local PLAYER_HUNT_RANGE = 120
 local HUNT_UNGUARDED_CHANCE = 0.75
 local HUNT_GUARDED_CHANCE = 0.10
@@ -99,7 +103,7 @@ local SAFE_DISTANCE_TO_STOP_FLEE = 60
 
 -- Spawn spread (Terrain-wide)
 local SPAWN_MIN_DISTANCE_FROM_PLAYERS = 90
-local SPAWN_MIN_DISTANCE_BETWEEN_GROUPS = 80
+local SPAWN_MIN_DISTANCE_BETWEEN_GROUPS = 55
 local SPAWN_MAX_ATTEMPTS = 18
 
 local SPAWN_BOUNDS_MARGIN = 12
@@ -131,10 +135,12 @@ type NpcUnit = {
 	humanoid: Humanoid,
 	power: number,
 	last_attack: number,
+	last_support: number,
 }
 
 type GroupState = {
 	id: string,
+	faction_id: string,
 	folder: Folder,
 	units: { NpcUnit },
 	leader: NpcUnit,
@@ -262,17 +268,37 @@ local function setup_collision_groups()
 	register_collision_group("Leaders")
 
 	-- NPCs don't collide with each other (prevents climbing / pileups)
-	PhysicsService:CollisionGroupSetCollidable(NPC_COLLISION_GROUP, NPC_COLLISION_GROUP, false)
+	PhysicsService:CollisionGroupSetCollidable(
+		NPC_COLLISION_GROUP,
+		NPC_COLLISION_GROUP,
+		false
+	)
 
 	-- Bosses also don't collide with normal NPCs (keeps swarms stable)
-	PhysicsService:CollisionGroupSetCollidable(NPC_BOSS_COLLISION_GROUP, NPC_COLLISION_GROUP, false)
+	PhysicsService:CollisionGroupSetCollidable(
+		NPC_BOSS_COLLISION_GROUP,
+		NPC_COLLISION_GROUP,
+		false
+	)
 
 	-- Bosses ignore player army during the initial charge.
-	PhysicsService:CollisionGroupSetCollidable(NPC_BOSS_COLLISION_GROUP, "Units", false)
-	PhysicsService:CollisionGroupSetCollidable(NPC_BOSS_COLLISION_GROUP, "Leaders", false)
+	PhysicsService:CollisionGroupSetCollidable(
+		NPC_BOSS_COLLISION_GROUP,
+		"Units",
+		false
+	)
+	PhysicsService:CollisionGroupSetCollidable(
+		NPC_BOSS_COLLISION_GROUP,
+		"Leaders",
+		false
+	)
 
 	-- Optional: bosses collide with bosses? usually also false to avoid stacking
-	PhysicsService:CollisionGroupSetCollidable(NPC_BOSS_COLLISION_GROUP, NPC_BOSS_COLLISION_GROUP, false)
+	PhysicsService:CollisionGroupSetCollidable(
+		NPC_BOSS_COLLISION_GROUP,
+		NPC_BOSS_COLLISION_GROUP,
+		false
+	)
 end
 
 local function set_model_collision_group(model: Model, group_name: string)
@@ -432,7 +458,10 @@ local function emit_arrow_tracer(
 	ArrowTracerPool.emit(from_root, target_root)
 end
 
-local function compute_damage_after_defense(target_model: Model, raw_damage: number): number
+local function compute_damage_after_defense(
+	target_model: Model,
+	raw_damage: number
+): number
 	-- Defense is a fraction [0..0.9] meaning damage reduction.
 	local defense = get_number_attr(target_model, "Defense")
 	if not defense then
@@ -444,9 +473,15 @@ local function compute_damage_after_defense(target_model: Model, raw_damage: num
 	return math.max(1, math.floor(final + 0.5))
 end
 
-local function set_unit_attributes(unit: NpcUnit, group_id: string, is_leader: boolean)
+local function set_unit_attributes(
+	unit: NpcUnit,
+	group_id: string,
+	is_leader: boolean,
+	faction_id: string
+)
 	unit.model:SetAttribute("NPCGroupId", group_id)
 	unit.model:SetAttribute("IsNPCLeader", is_leader)
+	unit.model:SetAttribute("FactionId", faction_id)
 
 	-- Prevent player systems from treating this as an owned army unit.
 	unit.model:SetAttribute("IsPlayerArmy", false)
@@ -511,7 +546,11 @@ local function move_unit_to(unit: NpcUnit, goal: Vector3)
 	unit.humanoid:MoveTo(goal)
 end
 
-local function clamp_goal_to_leash(anchor_pos: Vector3, goal: Vector3, leash_radius: number): Vector3
+local function clamp_goal_to_leash(
+	anchor_pos: Vector3,
+	goal: Vector3,
+	leash_radius: number
+): Vector3
 	local offset = goal - anchor_pos
 	local flat = Vector3.new(offset.X, 0, offset.Z)
 
@@ -528,7 +567,11 @@ local function pick_wander_goal(g: GroupState): Vector3
 	local center = get_group_center(g)
 	local angle = math.random() * math.pi * 2
 	local radius = math.random(10, WANDER_RADIUS)
-	local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+	local offset = Vector3.new(
+		math.cos(angle) * radius,
+		0,
+		math.sin(angle) * radius
+	)
 	return Vector3.new(center.X, 6, center.Z) + offset
 end
 
@@ -540,7 +583,10 @@ local function get_spawn_time_seed(model: Model): number
 	return 0
 end
 
-local function compute_formation_spacing(leader_model: Model, follower_model: Model): number
+local function compute_formation_spacing(
+	leader_model: Model,
+	follower_model: Model
+): number
 	local leader_scale = get_size_scale(leader_model)
 	local follower_scale = get_size_scale(follower_model)
 
@@ -615,7 +661,11 @@ local function compute_attack_approach_goal(
 	local max_radius = math.max(MELEE_STICK_RADIUS, ATTACK_RANGE - 2.0)
 	local radius = math.min(raw_radius, max_radius)
 
-	local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+	local offset = Vector3.new(
+		math.cos(angle) * radius,
+		0,
+		math.sin(angle) * radius
+	)
 	return Vector3.new(target_pos.X, 6, target_pos.Z) + offset
 end
 
@@ -649,7 +699,13 @@ local function get_nearby_groups(g: GroupState, range: number): { GroupState }
 	local center = get_group_center(g)
 
 	for id, other in pairs(groups) do
-		if id ~= g.id then
+		local hostile = faction_service
+			and faction_service.is_hostile
+			and faction_service.is_hostile(
+				g.faction_id,
+				other.faction_id
+			)
+		if id ~= g.id and hostile then
 			local dist = (get_group_center(other) - center).Magnitude
 			if dist <= range then
 				table.insert(nearby, other)
@@ -714,7 +770,10 @@ end
 
 -- ===== Flee logic =====
 
-local function should_flee_ratio(self_strength: number, threat_strength: number): (boolean, number)
+local function should_flee_ratio(
+	self_strength: number,
+	threat_strength: number
+): (boolean, number)
 	if self_strength <= 0 then
 		return true, math.huge
 	end
@@ -722,7 +781,9 @@ local function should_flee_ratio(self_strength: number, threat_strength: number)
 	return ratio >= FLEE_START_RATIO, ratio
 end
 
-local function find_most_threatening_source(g: GroupState): (Vector3?, number, number)
+local function find_most_threatening_source(
+	g: GroupState
+): (Vector3?, number, number)
 	local self_center = get_group_center(g)
 	local self_strength = compute_group_strength(g)
 
@@ -730,20 +791,9 @@ local function find_most_threatening_source(g: GroupState): (Vector3?, number, n
 	local best_ratio = 0
 	local best_dist = math.huge
 
-	-- Other NPC groups
-	for _, other in ipairs(get_nearby_groups(g, THREAT_SCAN_RANGE)) do
-		local threat_strength = compute_group_strength(other)
-		local ok, ratio = should_flee_ratio(self_strength, threat_strength)
-		local dist = (get_group_center(other) - self_center).Magnitude
-
-		if ok then
-			if ratio > best_ratio or (ratio == best_ratio and dist < best_dist) then
-				best_ratio = ratio
-				best_dist = dist
-				best_pos = get_group_center(other)
-			end
-		end
-	end
+	-- Rival factions deliberately stand and fight. Fleeing is reserved
+	-- for overwhelming player-army pressure so autonomous battles
+	-- reliably create battlefield corpses.
 
 	-- Player army near this group (only counts if guarding its player)
 	local army_strength, army_center = compute_player_army_threat_near_pos(
@@ -889,7 +939,10 @@ local function is_player_guarded(player: Player): boolean
 	return false
 end
 
-local function find_nearest_player(center: Vector3, range: number): (Player?, BasePart?, Humanoid?, number)
+local function find_nearest_player(
+	center: Vector3,
+	range: number
+): (Player?, BasePart?, Humanoid?, number)
 	local best_player: Player? = nil
 	local best_root: BasePart? = nil
 	local best_hum: Humanoid? = nil
@@ -915,77 +968,79 @@ local function find_nearest_player(center: Vector3, range: number): (Player?, Ba
 	return best_player, best_root, best_hum, best_dist
 end
 
-local function decide_goal_for_group(g: GroupState): Vector3
+local function decide_goal_for_group(
+	g: GroupState
+): Vector3
 	if g.is_fleeing then
 		return compute_flee_goal(g)
 	end
 
 	local center = get_group_center(g)
-	local nearby = get_nearby_groups(g, GROUP_SCAN_RANGE)
-	local self_strength = compute_group_strength(g)
+	local nearest_enemy: GroupState? = nil
+	local nearest_distance = math.huge
 
-	local best_threat: GroupState? = nil
-	local best_threat_dist = math.huge
-
-	local best_prey: GroupState? = nil
-	local best_prey_dist = math.huge
-
-	for _, other in ipairs(nearby) do
-		local other_strength = compute_group_strength(other)
-		local dist = (get_group_center(other) - center).Magnitude
-
-		if other_strength > self_strength and dist <= FEAR_RANGE then
-			if dist < best_threat_dist then
-				best_threat_dist = dist
-				best_threat = other
-			end
-		elseif other_strength < self_strength then
-			if dist < best_prey_dist then
-				best_prey_dist = dist
-				best_prey = other
-			end
+	for _, other in ipairs(
+		get_nearby_groups(g, GROUP_SCAN_RANGE)
+	) do
+		local distance = (
+			get_group_center(other) - center
+		).Magnitude
+		if distance < nearest_distance then
+			nearest_enemy = other
+			nearest_distance = distance
 		end
 	end
 
-	if best_threat then
-		local threat_pos = get_group_center(best_threat)
-		local flee_dir = center - threat_pos
-		local flat = Vector3.new(flee_dir.X, 0, flee_dir.Z)
-		if flat.Magnitude < 0.01 then
-			flat = Vector3.new(1, 0, 0)
-		end
-
-		local raw_goal = center + (flat.Unit * WANDER_RADIUS)
-		local goal = Vector3.new(raw_goal.X, 6, raw_goal.Z)
-		return clamp_goal_to_leash(g.anchor_pos, goal, GROUP_LEASH_RADIUS)
+	if nearest_enemy then
+		local enemy_center = get_group_center(nearest_enemy)
+		local goal = Vector3.new(
+			enemy_center.X,
+			6,
+			enemy_center.Z
+		)
+		return clamp_goal_to_leash(
+			g.anchor_pos,
+			goal,
+			GROUP_LEASH_RADIUS
+		)
 	end
 
-	if best_prey then
-		local prey_center = get_group_center(best_prey)
-		local goal = Vector3.new(prey_center.X, 6, prey_center.Z)
-		return clamp_goal_to_leash(g.anchor_pos, goal, GROUP_LEASH_RADIUS)
-	end
-
-	-- If there is an unguarded player nearby, sometimes hunt them.
-	-- This prevents the game from feeling like the player is always the chaser.
-	local nearest_player, player_root, _, _ = find_nearest_player(center, PLAYER_HUNT_RANGE)
+	local nearest_player, player_root, _, _ =
+		find_nearest_player(center, PLAYER_HUNT_RANGE)
 	if nearest_player and player_root then
 		local guarded = is_player_guarded(nearest_player)
-		local chance = guarded and HUNT_GUARDED_CHANCE or HUNT_UNGUARDED_CHANCE
+		local chance = if guarded
+			then HUNT_GUARDED_CHANCE
+			else HUNT_UNGUARDED_CHANCE
 		if math.random() < chance then
 			local player_pos = player_root.Position
-			local goal = Vector3.new(player_pos.X, 6, player_pos.Z)
-			return clamp_goal_to_leash(g.anchor_pos, goal, GROUP_LEASH_RADIUS)
+			local goal = Vector3.new(
+				player_pos.X,
+				6,
+				player_pos.Z
+			)
+			return clamp_goal_to_leash(
+				g.anchor_pos,
+				goal,
+				GROUP_LEASH_RADIUS
+			)
 		end
 	end
 
-	if not g.wander_goal or (now() - g.last_wander_pick) > 3.5 then
+	if not g.wander_goal
+		or (now() - g.last_wander_pick) > 3.5
+	then
 		g.wander_goal = pick_wander_goal(g)
 		g.last_wander_pick = now()
 	end
 
-	local wander_goal = g.wander_goal or Vector3.new(center.X, 6, center.Z)
-	return clamp_goal_to_leash(g.anchor_pos, wander_goal, GROUP_LEASH_RADIUS)
+	local wander_goal = g.wander_goal
+		or Vector3.new(center.X, 6, center.Z)
+	return clamp_goal_to_leash(
+		g.anchor_pos,
+		wander_goal,
+		GROUP_LEASH_RADIUS
+	)
 end
 
 -- ===== Target acquisition =====
@@ -1080,7 +1135,7 @@ end
 
 
 local function choose_closest_npc_target_outside_group(
-	own_group_id: string,
+	own_group: GroupState,
 	npc_pos: Vector3
 ): (Model?, BasePart?, Humanoid?)
 	local best_model: Model? = nil
@@ -1089,7 +1144,13 @@ local function choose_closest_npc_target_outside_group(
 	local best_dist = math.huge
 
 	for _, other in pairs(groups) do
-		if other.id ~= own_group_id then
+		local hostile = faction_service
+			and faction_service.is_hostile
+			and faction_service.is_hostile(
+				own_group.faction_id,
+				other.faction_id
+			)
+		if other.id ~= own_group.id and hostile then
 			for _, u in ipairs(other.units) do
 				if u.model.Parent ~= nil and u.humanoid.Health > 0 then
 					local dist = (u.root.Position - npc_pos).Magnitude
@@ -1108,21 +1169,28 @@ local function choose_closest_npc_target_outside_group(
 end
 
 local function reacquire_target_for_npc(
-	own_group_id: string,
+	own_group: GroupState,
 	npc_unit: NpcUnit
 ): (Model?, BasePart?, Humanoid?)
 	local npc_pos = npc_unit.root.Position
 
 	local only_players = false
-	if is_boss_model(npc_unit.model) and get_boss_phase(npc_unit.model) == "Charge" then
+	if is_boss_model(npc_unit.model)
+		and get_boss_phase(npc_unit.model) == "Charge"
+	then
 		only_players = true
 	end
 
-	local p_model, p_root, p_hum = choose_closest_player_or_army_target(npc_pos, only_players)
-	local n_model, n_root, n_hum = choose_closest_npc_target_outside_group(
-		own_group_id,
-		npc_pos
-	)
+	local p_model, p_root, p_hum =
+		choose_closest_player_or_army_target(
+			npc_pos,
+			only_players
+		)
+	local n_model, n_root, n_hum =
+		choose_closest_npc_target_outside_group(
+			own_group,
+			npc_pos
+		)
 
 	local best_model: Model? = nil
 	local best_root: BasePart? = nil
@@ -1240,7 +1308,7 @@ local function update_target_state(
 		state.target_humanoid = humanoid
 	else
 		local new_model, new_root, new_hum = reacquire_target_for_npc(
-			own_group.id,
+			own_group,
 			npc_unit
 		)
 		state.target_model = new_model
@@ -1249,6 +1317,65 @@ local function update_target_state(
 	end
 
 	state.next_retarget_time = current_time + TARGET_REEVAL_COOLDOWN
+end
+
+--[[
+	Runs one support-healing pulse for a faction unit.
+
+	Args:
+		group (GroupState): Unit's current faction group.
+		unit (NpcUnit): Potential support unit.
+
+	Returns:
+		None.
+]]
+local function pulse_group_support(
+	group: GroupState,
+	unit: NpcUnit
+)
+	if unit.model:GetAttribute("CombatRole") ~= "Support" then
+		return
+	end
+
+	local heal = get_number_attr(
+		unit.model,
+		"SupportHealAmount"
+	) or 0
+	local radius = get_number_attr(
+		unit.model,
+		"SupportHealRadius"
+	) or 0
+	local cooldown = get_number_attr(
+		unit.model,
+		"SupportHealCooldown"
+	) or 3
+	if heal <= 0 or radius <= 0 then
+		return
+	end
+
+	local current_time = now()
+	if current_time - unit.last_support < cooldown then
+		return
+	end
+	unit.last_support = current_time
+
+	for _, ally in ipairs(group.units) do
+		if ally.humanoid.Health <= 0 then
+			continue
+		end
+		if ally.humanoid.Health >= ally.humanoid.MaxHealth then
+			continue
+		end
+		local distance = (
+			ally.root.Position - unit.root.Position
+		).Magnitude
+		if distance <= radius then
+			ally.humanoid.Health = math.min(
+				ally.humanoid.MaxHealth,
+				ally.humanoid.Health + heal
+			)
+		end
+	end
 end
 
 -- ===== Spawn helpers =====
@@ -1447,7 +1574,12 @@ local function prune_dead_and_expired()
 			if g.leader.humanoid.Health <= 0 or g.leader.model.Parent == nil then
 				g.leader = g.units[1]
 				for _, u in ipairs(g.units) do
-					set_unit_attributes(u, g.id, u == g.leader)
+					set_unit_attributes(
+						u,
+						g.id,
+						u == g.leader,
+						g.faction_id
+					)
 				end
 			end
 		end
@@ -1513,139 +1645,288 @@ local function trim_distant_groups_to_cap()
 	end
 end
 
-local function pick_spawn_template(templates: { string }): string
-	-- use weighted template selection when available.
-	if model_library_service and model_library_service.pick_spawn_template then
-		local chosen = model_library_service.pick_spawn_template(templates)
-		if chosen then
-			return chosen
+local function find_roster_entry_for_role(
+	faction_id: string,
+	role_id: string
+): any?
+	if not faction_service or not faction_service.get_definition then
+		return nil
+	end
+
+	local definition = faction_service.get_definition(faction_id)
+	if not definition then
+		return nil
+	end
+
+	for _, entry in ipairs(definition.roster) do
+		if entry.role_id == role_id then
+			return entry
 		end
 	end
-
-	return templates[math.random(1, #templates)]
+	return nil
 end
 
-local function spawn_group()
-	if not model_library_service or not model_library_service.spawn_from_template then
-		return
+local function choose_faction_for_spawn(
+	anchor_pos: Vector3
+): string
+	if not faction_service
+		or not faction_service.choose_faction_for_position
+	then
+		return "OssuaryLegion"
 	end
 
-	local unit_cap = compute_desired_unit_cap()
-	if count_total_units() >= unit_cap then
-		return
+	local min_x, max_x, min_z, max_z = get_terrain_bounds_xz()
+	return faction_service.choose_faction_for_position(
+		anchor_pos,
+		min_x,
+		max_x,
+		min_z,
+		max_z
+	)
+end
+
+local function create_faction_group(
+	faction_id: string,
+	anchor_pos: Vector3,
+	forced_roles: { string }?
+): GroupState?
+	if not model_library_service
+		or not model_library_service.spawn_from_template
+		or not faction_service
+	then
+		return nil
 	end
 
-
-	local templates: { string } = {}
-	if model_library_service.list_template_names then
-		templates = model_library_service.list_template_names()
+	local faction = faction_service.get_definition(faction_id)
+	if not faction then
+		return nil
 	end
 
-	if #templates == 0 then
-		templates = { "Skeleton" }
-	end
-
-	local anchor_pos = find_spawn_position()
 	local id = HttpService:GenerateGUID(false)
-
 	local folder = Instance.new("Folder")
 	folder.Name = id
+	folder:SetAttribute("FactionId", faction_id)
+	folder:SetAttribute("FactionName", faction.display_name)
+	folder:SetAttribute("FactionRegion", faction.region_name)
 	folder.Parent = group_folder
 
 	local group_units: { NpcUnit } = {}
+	local count = if forced_roles
+		then #forced_roles
+		else math.random(GROUP_SIZE_MIN, GROUP_SIZE_MAX)
 
-	local count = math.random(GROUP_SIZE_MIN, GROUP_SIZE_MAX)
-	for _ = 1, count do
+	for index = 1, count do
 		npc_spawn_serial += 1
-		local template_name = pick_spawn_template(templates)
+
+		local entry = if forced_roles
+			then find_roster_entry_for_role(
+				faction_id,
+				forced_roles[index]
+			)
+			else faction_service.pick_roster_entry(faction_id)
+		if not entry then
+			continue
+		end
 
 		local jitter = Vector3.new(
 			(math.random() * 2 - 1) * 8,
 			0,
 			(math.random() * 2 - 1) * 8
 		)
-
 		local model = model_library_service.spawn_from_template(
-			template_name,
+			entry.template_name,
 			CFrame.new(anchor_pos + jitter),
 			folder
 		)
+		if not model then
+			continue
+		end
 
-		if model then
-			local is_boss = model:GetAttribute("IsBoss") == true
+		faction_service.apply_identity(
+			model,
+			faction_id,
+			entry.role_id,
+			entry.rarity
+		)
 
-			if is_boss then
-				-- Bosses start in Charge phase (ignore player army for the opener).
-				set_boss_charge_enabled(model, true)
-			else
-				set_model_collision_group(model, NPC_COLLISION_GROUP)
-			end
-
-			model:SetAttribute("SpawnTime", now())
-			model:SetAttribute("NPCGroupId", id)
-			model:SetAttribute(
-				"NPCTargetBucket",
-				npc_spawn_serial % NPC_TARGET_BUCKETS
+		local is_boss = model:GetAttribute("IsBoss") == true
+		if is_boss then
+			set_boss_charge_enabled(model, true)
+		else
+			set_model_collision_group(
+				model,
+				NPC_COLLISION_GROUP
 			)
+		end
 
-			local root = get_root(model)
-			local hum = get_humanoid(model)
-			if root and hum then
-				pcall(function()
-					root:SetNetworkOwnershipAuto()
-				end)
+		model:SetAttribute("SpawnTime", now())
+		model:SetAttribute("NPCGroupId", id)
+		model:SetAttribute(
+			"NPCTargetBucket",
+			npc_spawn_serial % NPC_TARGET_BUCKETS
+		)
 
-				local unit: NpcUnit = {
-					model = model,
-					root = root,
-					humanoid = hum,
-					power = get_model_dps_estimate(model),
-					last_attack = 0,
-				}
-				table.insert(group_units, unit)
-			else
-				model:Destroy()
-			end
+		local root = get_root(model)
+		local hum = get_humanoid(model)
+		if root and hum then
+			pcall(function()
+				root:SetNetworkOwnershipAuto()
+			end)
+
+			local unit: NpcUnit = {
+				model = model,
+				root = root,
+				humanoid = hum,
+				power = get_model_dps_estimate(model),
+				last_attack = 0,
+				last_support = 0,
+			}
+			table.insert(group_units, unit)
+		else
+			model:Destroy()
 		end
 	end
 
 	if #group_units == 0 then
 		folder:Destroy()
-		return
+		return nil
 	end
 
 	local leader = group_units[1]
-	for _, u in ipairs(group_units) do
-		set_unit_attributes(u, id, u == leader)
+	for _, unit in ipairs(group_units) do
+		set_unit_attributes(
+			unit,
+			id,
+			unit == leader,
+			faction_id
+		)
 	end
 
-	local g: GroupState = {
+	local group: GroupState = {
 		id = id,
+		faction_id = faction_id,
 		folder = folder,
 		units = group_units,
 		leader = leader,
-
 		anchor_pos = anchor_pos,
-
 		wander_goal = nil,
 		last_wander_pick = 0,
-
 		is_fleeing = false,
 		flee_until_time = 0,
 		flee_from_pos = nil,
 	}
-
-	groups[id] = g
+	groups[id] = group
+	return group
 end
 
-function NPCService.init(model_library: any, army: any)
+local function spawn_group()
+	if count_total_units() >= compute_desired_unit_cap() then
+		return
+	end
+
+	local anchor_pos = find_spawn_position()
+	local faction_id = choose_faction_for_spawn(anchor_pos)
+	create_faction_group(faction_id, anchor_pos, nil)
+end
+
+function NPCService.init(
+	model_library: any,
+	army: any,
+	faction_service_ref: any
+)
 	model_library_service = model_library
 	army_service = army
+	faction_service = faction_service_ref
 
 	group_folder = ensure_group_folder()
 	npc_folder = ensure_npc_folder()
 	setup_collision_groups()
+end
 
+function NPCService.debug_spawn_faction_group(
+	faction_id: string,
+	position: Vector3,
+	roles: { string }?
+): string?
+	if not RunService:IsStudio() then
+		return nil
+	end
+
+	local group = create_faction_group(
+		faction_id,
+		position,
+		roles
+	)
+	return if group then group.id else nil
+end
+
+--[[
+	Controls ambient NPC spawning during Studio acceptance tests.
+
+	Args:
+		enabled (boolean): Whether the normal spawn loop may run.
+
+	Returns:
+		None.
+]]
+function NPCService.debug_set_ambient_spawning_enabled(
+	enabled: boolean
+)
+	if not RunService:IsStudio() then
+		return
+	end
+	ambient_spawning_enabled = enabled
+end
+
+--[[
+	Clears all tracked faction groups in Studio.
+
+	Args:
+		None.
+
+	Returns:
+		None.
+]]
+function NPCService.debug_clear_groups()
+	if not RunService:IsStudio() then
+		return
+	end
+
+	local ids = {}
+	for id in pairs(groups) do
+		table.insert(ids, id)
+	end
+	for _, id in ipairs(ids) do
+		local group = groups[id]
+		if group then
+			destroy_live_group(id, group)
+		end
+	end
+end
+
+function NPCService.debug_group_snapshot(): { any }
+	local result = {}
+	if not RunService:IsStudio() then
+		return result
+	end
+
+	for _, group in pairs(groups) do
+		local roles = {}
+		for _, unit in ipairs(group.units) do
+			table.insert(
+				roles,
+				unit.model:GetAttribute("CombatRole")
+			)
+		end
+		table.insert(result, {
+			id = group.id,
+			faction_id = group.faction_id,
+			unit_count = #group.units,
+			roles = roles,
+			center = get_group_center(group),
+		})
+	end
+	return result
 end
 
 function NPCService.start()
@@ -1656,6 +1937,11 @@ function NPCService.start()
 
 	spawn_task = task.spawn(function()
 		while running do
+			if not ambient_spawning_enabled then
+				task.wait(SPAWN_INTERVAL_ACTIVE_SECONDS)
+				continue
+			end
+
 			local unit_cap = compute_desired_unit_cap()
 			local total = count_total_units()
 			local deficit = unit_cap - total
@@ -1663,9 +1949,18 @@ function NPCService.start()
 			if deficit > 0 then
 				-- Spawn multiple groups when under target density.
 				-- Estimate group size to decide how many groups we need.
-				local avg_group_size = math.max(1, math.floor((GROUP_SIZE_MIN + GROUP_SIZE_MAX) * 0.5))
+				local avg_group_size = math.max(
+					1,
+					math.floor(
+						(GROUP_SIZE_MIN + GROUP_SIZE_MAX) * 0.5
+					)
+				)
 				local desired_groups = math.ceil(deficit / avg_group_size)
-				local groups_to_spawn = math.clamp(desired_groups, 1, SPAWN_BURST_MAX_GROUPS)
+				local groups_to_spawn = math.clamp(
+					desired_groups,
+					1,
+					SPAWN_BURST_MAX_GROUPS
+				)
 
 				for _ = 1, groups_to_spawn do
 					spawn_group()
@@ -1713,6 +2008,7 @@ function NPCService.start()
 						continue
 					end
 
+					pulse_group_support(g, npc_unit)
 					update_target_state(g, npc_unit, full_group_update)
 
 					local state = get_or_create_target_state(npc_unit.model)
@@ -1728,15 +2024,17 @@ function NPCService.start()
 						local is_boss = is_boss_model(npc_unit.model)
 
 						-- 1) MOVEMENT
-						-- If fleeing: do NOT override movement here (formation already handles flee).
-						-- Bosses never flee (enforced in update_flee_state), so bosses can still move/charge.
+						-- Flee movement is already handled by the group
+						-- formation. Bosses never flee, so they can still
+						-- charge and reposition normally.
 						if not g.is_fleeing
 							and (not is_distant or full_group_update)
 						then
 							local move_goal = leashed_target_pos
 
 							if is_boss then
-								-- Boss opener: charge through army toward player (ignore army in targeting).
+								-- Boss opener: charge through the army toward
+								-- the player and ignore army targets.
 								if get_boss_phase(npc_unit.model) == "Charge" then
 									move_goal = leashed_target_pos
 									apply_boss_shove(npc_unit.root)
@@ -1781,9 +2079,22 @@ function NPCService.start()
 									damage
 								)
 
-								state.target_model:SetAttribute("LastDamageSourceKind", "NPC")
-								state.target_model:SetAttribute("LastHitOwnerUserId", 0)
-								state.target_model:SetAttribute("LastHitTime", os.clock())
+								state.target_model:SetAttribute(
+									"LastDamageSourceKind",
+									"NPC_FACTION"
+								)
+								state.target_model:SetAttribute(
+									"LastHitFactionId",
+									g.faction_id
+								)
+								state.target_model:SetAttribute(
+									"LastHitOwnerUserId",
+									0
+								)
+								state.target_model:SetAttribute(
+									"LastHitTime",
+									os.clock()
+								)
 								if attack_range > ATTACK_RANGE + 0.5 then
 									emit_arrow_tracer(npc_unit.root, state.target_root)
 								end
@@ -1821,6 +2132,28 @@ function NPCService.start()
 					group_count += 1
 				end
 				Workspace:SetAttribute("NPCGroupCount", group_count)
+
+				if faction_service
+					and faction_service.get_faction_ids
+				then
+					local counts: { [string]: number } = {}
+					for _, faction_id in ipairs(
+						faction_service.get_faction_ids()
+					) do
+						counts[faction_id] = 0
+					end
+					for _, group in pairs(groups) do
+						counts[group.faction_id] =
+							(counts[group.faction_id] or 0)
+							+ #group.units
+					end
+					for faction_id, count in pairs(counts) do
+						Workspace:SetAttribute(
+							"NPCFactionCount_" .. faction_id,
+							count
+						)
+					end
+				end
 
 				metric_total_ms = 0
 				metric_samples = 0

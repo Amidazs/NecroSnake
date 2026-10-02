@@ -10,6 +10,9 @@ local ATTR_ABILITY_IDS = "AbilityIdsJson"
 local ATTR_SOURCE_MASTER_ID = "SourceMasterId"
 local ATTR_DEPLOYED_MASTER_ID = "DeployedMasterId"
 local ATTR_ACQUISITION_KIND = "AcquisitionKind"
+local ATTR_FACTION_ID = "FactionId"
+local ATTR_COMBAT_ROLE = "CombatRole"
+local ATTR_FACTION_RARITY = "FactionRarity"
 
 export type UnitRecord = {
 	record_id: string,
@@ -21,6 +24,9 @@ export type UnitRecord = {
 	source_master_id: string?,
 	deployed_master_id: string?,
 	acquisition_kind: string?,
+	faction_id: string?,
+	combat_role: string?,
+	faction_rarity: string?,
 	command_cost: number?,
 }
 
@@ -94,6 +100,9 @@ local function copy_record(record: UnitRecord): UnitRecord
 		source_master_id = record.source_master_id,
 		deployed_master_id = record.deployed_master_id,
 		acquisition_kind = record.acquisition_kind,
+		faction_id = record.faction_id,
+		combat_role = record.combat_role,
+		faction_rarity = record.faction_rarity,
 		command_cost = record.command_cost,
 	}
 end
@@ -134,6 +143,9 @@ function UnitRecordService.normalize(raw: any): UnitRecord?
 			raw.deployed_master_id
 		),
 		acquisition_kind = optional_string(raw.acquisition_kind),
+		faction_id = optional_string(raw.faction_id),
+		combat_role = optional_string(raw.combat_role),
+		faction_rarity = optional_string(raw.faction_rarity),
 		command_cost = command_cost,
 	}
 end
@@ -182,6 +194,18 @@ function UnitRecordService.from_model(model: Model): UnitRecord
 			model,
 			ATTR_ACQUISITION_KIND
 		),
+		faction_id = read_string_attribute(
+			model,
+			ATTR_FACTION_ID
+		),
+		combat_role = read_string_attribute(
+			model,
+			ATTR_COMBAT_ROLE
+		),
+		faction_rarity = read_string_attribute(
+			model,
+			ATTR_FACTION_RARITY
+		),
 		command_cost = command_cost,
 	}
 end
@@ -216,6 +240,21 @@ function UnitRecordService.apply_to_model(
 		ATTR_ACQUISITION_KIND,
 		record.acquisition_kind
 	)
+	write_optional_attribute(
+		model,
+		ATTR_FACTION_ID,
+		record.faction_id
+	)
+	write_optional_attribute(
+		model,
+		ATTR_COMBAT_ROLE,
+		record.combat_role
+	)
+	write_optional_attribute(
+		model,
+		ATTR_FACTION_RARITY,
+		record.faction_rarity
+	)
 
 	local encoded = HttpService:JSONEncode(record.ability_ids)
 	model:SetAttribute(ATTR_ABILITY_IDS, encoded)
@@ -238,6 +277,9 @@ function UnitRecordService.stack_key(raw: any): string
 		record.evolution_id or "",
 		table.concat(record.ability_ids, ","),
 		record.deployed_master_id or "",
+		record.faction_id or "",
+		record.combat_role or "",
+		record.faction_rarity or "",
 	}, "|")
 end
 
