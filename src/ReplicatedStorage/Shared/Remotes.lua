@@ -90,4 +90,20 @@ function Remotes.world_event(): RemoteEvent
 	return Remotes.get_or_create_event("WorldEvent")
 end
 
+function Remotes.party_action(): RemoteEvent
+	return Remotes.get_or_create_event("PartyAction")
+end
+
+function Remotes.party_update(): RemoteEvent
+	return Remotes.get_or_create_event("PartyUpdate")
+end
+
+function Remotes.matchmaking_action(): RemoteEvent
+	return Remotes.get_or_create_event("MatchmakingAction")
+end
+
+function Remotes.matchmaking_update(): RemoteEvent
+	return Remotes.get_or_create_event("MatchmakingUpdate")
+end
+
 return Remotes

@@ -78,6 +78,23 @@ local function get_army_threat(player: Player): string
 	return "Army: Horde"
 end
 
+--[[
+	Returns whether a player shares the local player's party.
+
+	Args:
+		player (Player): Player to inspect.
+
+	Returns:
+		boolean: True when both players share a PartyId.
+]]
+local function is_party_member(player: Player): boolean
+	local local_id = LOCAL_PLAYER:GetAttribute("PartyId")
+	local other_id = player:GetAttribute("PartyId")
+	return typeof(local_id) == "string"
+		and local_id ~= ""
+		and local_id == other_id
+end
+
 local function find_nearest_enemy(): (Player?, number)
 	local local_root = get_root(LOCAL_PLAYER)
 	if not local_root then
@@ -89,6 +106,7 @@ local function find_nearest_enemy(): (Player?, number)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= LOCAL_PLAYER
+			and not is_party_member(player)
 			and player:GetAttribute("PvPZone") ~= "SafeZone"
 		then
 			local root = get_root(player)
@@ -213,7 +231,17 @@ RunService.Heartbeat:Connect(function(delta_time)
 	end
 
 	panel.Visible = true
-	title.Text = ("Scouting: %s"):format(target.DisplayName)
+	local relation = ""
+	local friend_ok, friend = pcall(function()
+		return LOCAL_PLAYER:IsFriendsWith(target.UserId)
+	end)
+	if friend_ok and friend then
+		relation = " [FRIEND]"
+	end
+	title.Text = ("Scouting: %s%s"):format(
+		target.DisplayName,
+		relation
+	)
 	details.Text = ("%s   |   %s   |   %.0f studs"):format(
 		get_level_band(target),
 		get_rebirth_band(target),

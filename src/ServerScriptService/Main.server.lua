@@ -74,6 +74,14 @@ local FormationProfileService = require(
 	ServicesFolder:WaitForChild("FormationProfileService")
 )
 
+local PartyService = require(
+	ServicesFolder:WaitForChild("PartyService")
+)
+
+local MatchmakingService = require(
+	ServicesFolder:WaitForChild("MatchmakingService")
+)
+
 local TeleportService = require(
 	ServicesFolder:WaitForChild("TeleportService")
 )
@@ -140,6 +148,10 @@ local function main()
 	Remotes.progression()
 	Remotes.skills()
 	Remotes.world_event()
+	Remotes.party_action()
+	Remotes.party_update()
+	Remotes.matchmaking_action()
+	Remotes.matchmaking_update()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")
@@ -153,7 +165,10 @@ local function main()
 	SoulCollectionService.start()
 	NecromancerProgressionService.init(SoulCollectionService)
 	NecromancerProgressionService.start()
-	BackpackService.init(SoulCollectionService)
+	BackpackService.init(
+		SoulCollectionService,
+		UnitRecordService
+	)
 	BackpackService.start()
 
 	FormationProfileService.init(ModelLibraryService)
@@ -169,6 +184,18 @@ local function main()
 		ArmyService,
 		NecromancerProgressionService
 	)
+	PartyService.init(PvPService)
+	PartyService.start()
+	PvPService.set_party_service(PartyService)
+
+	MatchmakingService.init(
+		PartyService,
+		BackpackService,
+		SoulCollectionService,
+		PvPService
+	)
+	MatchmakingService.start()
+
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
@@ -205,7 +232,8 @@ local function main()
 	TeleportService.init(
 		ArmyService,
 		BackpackService,
-		PvPService
+		PvPService,
+		MatchmakingService
 	)
 	TeleportService.start()
 	PlayerMovementService.start()

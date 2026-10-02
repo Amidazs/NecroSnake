@@ -23,6 +23,7 @@ local request_token_by_user_id: { [number]: number } = {}
 local army_service = nil :: any
 local backpack_service = nil :: any
 local pvp_service = nil :: any
+local matchmaking_service = nil :: any
 
 local function log(message: string)
 	print("[TeleportService] " .. message)
@@ -47,7 +48,10 @@ local function get_zone_part(model_name: string, part_name: string): BasePart?
 	return nil
 end
 
-local function get_region_center_cframe(model_name: string, region_name: string): CFrame?
+local function get_region_center_cframe(
+	model_name: string,
+	region_name: string
+): CFrame?
 	local part = get_zone_part(model_name, region_name)
 	if not part then
 		return nil
@@ -74,7 +78,10 @@ local function get_region_center_cframe(model_name: string, region_name: string)
 	return CFrame.new(part.Position)
 end
 
-local function teleport_player_to(player: Player, destination: string): (boolean, string)
+local function teleport_player_to(
+	player: Player,
+	destination: string
+): (boolean, string)
 	local character = player.Character
 	if not character then
 		return false, "Character missing."
@@ -231,20 +238,86 @@ local function handle_safezone_request(player: Player)
 	end)
 end
 
-local function handle_arena_request(player: Player)
+--[[
+	Moves one player into the local Arena and deploys their loadout.
+
+	Args:
+		player (Player): Player entering the local Arena.
+
+	Returns:
+		boolean: True when the move succeeded.
+		string: Failure message when false.
+]]
+local function enter_local_arena(
+	player: Player
+): (boolean, string)
 	next_token(player.UserId)
 
 	local ok, err = teleport_player_to(player, "Arena")
 	if not ok then
-		fire_result(player, false, "Teleport failed: " .. err)
-		return
+		return false, "Teleport failed: " .. err
 	end
 
 	deploy_backpack_into_world(player)
 	if pvp_service and pvp_service.mark_entered_arena then
 		pvp_service.mark_entered_arena(player)
 	end
-	fire_result(player, true, "You step through the veil into the arena.")
+	return true, ""
+end
+
+--[[
+	Queues a solo player or party for Arena matchmaking.
+
+	Args:
+		player (Player): Requesting solo player or party leader.
+
+	Returns:
+		None.
+]]
+local function handle_arena_request(player: Player)
+	if matchmaking_service
+		and matchmaking_service.request_arena
+	then
+		local mode, message, members =
+			matchmaking_service.request_arena(player)
+
+		if mode == "DENIED" then
+			fire_result(player, false, message)
+			return
+		end
+
+		if mode == "TELEPORTING" then
+			for _, member in ipairs(members) do
+				fire_result(member, true, message)
+			end
+			return
+		end
+
+		for _, member in ipairs(members) do
+			local ok, err = enter_local_arena(member)
+			if ok then
+				fire_result(
+					member,
+					true,
+					message
+				)
+			else
+				fire_result(member, false, err)
+			end
+		end
+		return
+	end
+
+	local ok, err = enter_local_arena(player)
+	if not ok then
+		fire_result(player, false, err)
+		return
+	end
+	fire_result(
+		player,
+		true,
+		"You step through the veil into the arena."
+	)
 end
 
 local function on_teleport_request(player: Player, destination: string)
@@ -265,14 +338,80 @@ local function on_player_removing(player: Player)
 	next_token(player.UserId)
 end
 
+--[[
+	Completes an Arena matchmaking arrival after profile replication.
+
+	Args:
+		player (Player): Player arriving from another server.
+
+	Returns:
+		None.
+]]
+local function handle_matchmaking_arrival(player: Player)
+	if not matchmaking_service
+		or not matchmaking_service.should_auto_enter_arena
+		or not matchmaking_service.should_auto_enter_arena(player)
+	then
+		return
+	end
+
+	local deadline = os.clock() + 15
+	while player.Parent
+		and player:GetAttribute("SoulProfileLoaded") ~= true
+		and os.clock() < deadline
+	do
+		task.wait(0.1)
+	end
+
+	if not player.Parent then
+		return
+	end
+
+	local character = player.Character
+	if not character then
+		character = player.CharacterAdded:Wait()
+	end
+	character:WaitForChild("HumanoidRootPart", 10)
+
+	local ok, err = enter_local_arena(player)
+	if not ok then
+		fire_result(player, false, err)
+		return
+	end
+
+	if matchmaking_service.consume_auto_enter_arena then
+		matchmaking_service.consume_auto_enter_arena(player)
+	end
+	fire_result(
+		player,
+		true,
+		"Match found. You enter the Arena."
+	)
+end
+
+--[[
+	Hooks one player for a possible cross-server Arena arrival.
+
+	Args:
+		player (Player): Player to hook.
+
+	Returns:
+		None.
+]]
+local function hook_player(player: Player)
+	task.defer(handle_matchmaking_arrival, player)
+end
+
 function TeleportService.init(
 	army_service_ref: any,
 	backpack_service_ref: any,
-	pvp_service_ref: any?
+	pvp_service_ref: any?,
+	matchmaking_service_ref: any?
 )
 	army_service = army_service_ref
 	backpack_service = backpack_service_ref
 	pvp_service = pvp_service_ref
+	matchmaking_service = matchmaking_service_ref
 end
 
 function TeleportService.start()
@@ -283,7 +422,12 @@ function TeleportService.start()
 	did_start = true
 
 	Remotes.teleport_request().OnServerEvent:Connect(on_teleport_request)
+	Players.PlayerAdded:Connect(hook_player)
 	Players.PlayerRemoving:Connect(on_player_removing)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		hook_player(player)
+	end
 
 	log("Ready.")
 end

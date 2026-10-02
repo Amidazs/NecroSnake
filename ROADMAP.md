@@ -817,6 +817,47 @@ Work:
 - Friends can still join one another across progression bands.
 - Low-level accounts cannot easily drag veteran armies into beginner servers.
 
+**2 October 2026 Phase 11 playtest evidence:**
+- Phase 11 implementation is GREEN in the canonical Studio place.
+- Match strength combines Command Capacity, Rebirth count, selected
+  loadout command cost and equipped Necromancer skills.
+- Four background bands are implemented: Initiate, Adept, Veteran and
+  Ascendant.
+- Parties use the strongest member's score rather than an average. A
+  deterministic 6 / 58 / 21 party resolved to strength 58 / Ascendant.
+- Normal Arena matchmaking targets eight connected players per reserved
+  Arena server and refreshes an expiring MemoryStore server registry.
+- The reserved-server heartbeat counts connected players during arrival,
+  preventing a freshly created server from temporarily advertising zero
+  occupancy before players physically enter the Arena.
+- Join Friend deliberately bypasses progression bands only after Roblox
+  friendship is validated. Party leaders move the party together.
+- Normal cross-server hops use a 45-second cooldown; Join Friend uses a
+  shorter 15-second cooldown so friend play remains practical.
+- Party membership is server-authoritative, limited to four members,
+  restored through teleport data and changeable only from the Sanctum.
+- Party allies cannot damage one another, combat-tag one another or earn
+  PvP kill credit from one another. The PvP scout also excludes party
+  members from enemy targeting.
+- The Social / Party UI exposes current matchmaking band and strength,
+  current-server party invitations, Join Friend and party state.
+- Friend and party relationships receive battle-readable indicators.
+- Canonical runtime remotes returned Party max 4 and Arena target 8 with
+  an Initiate / Strength 5 test profile.
+- The canonical runtime completed Sanctum (3600,3600) -> matchmaking
+  QUEUED -> Arena (1000,1000) in one uninterrupted client acceptance.
+- Deterministic acceptance verified friend override, strongest-member
+  matching, non-leader queue rejection, party restore and hop protection.
+- A fresh independent reopen of the saved place.rbxl retained the Phase 10
+  authored world and all Phase 11 services, config and client scripts.
+- A clean saved-file production play loaded the Soul profile, services,
+  authored Arena and 300 foliage models with no runtime errors observed.
+- The local canonical file has PlaceId 0, so Roblox's live
+  ReserveServerAsync/GetPlayerPlaceInstanceAsync network calls cannot be
+  executed from this file. Their code paths and teleport data are in
+  place; a published-place cross-server smoke test remains a pre-launch
+  check rather than an unfinished Phase 11 feature.
+
 ## Phase 12 - Polish, onboarding, analytics and launch preparation
 
 Work:
@@ -849,18 +890,19 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 11: Matchmaking, friends and social play.**
+**Begin Phase 12: Polish, onboarding, analytics and launch preparation.**
 
-Phase 10 is accepted GREEN. The recovery placeholder world has been
-replaced by the authored four-faction Arena and functional Base district,
-with no-jump traversal and streaming-aware Base presentation verified in
-Studio. The final R15 faction unit-art roster can continue in parallel.
+Phase 11 is accepted GREEN in the canonical Studio place. Matchmaking,
+parties, Join Friend override, strongest-member anti-boosting, hop
+protection and friend/party battle readability are implemented. The final
+R15 faction unit-art roster can continue in parallel.
 
-The first Phase 11 slice is:
-1. Define the matchmaking strength inputs and server band model.
-2. Target eight-player Arena servers for normal matchmaking.
-3. Add Join Friend override behaviour without breaking progression bands.
-4. Add party state and strongest-member matchmaking.
-5. Add server-hopping protections.
-6. Add friend and party indicators for Arena readability.
-7. Playtest mixed-progression friend and party joins.
+The first Phase 12 slice is:
+1. Consolidate the final HUD, including social/matchmaking presentation.
+2. Complete mobile and controller support.
+3. Build the short first-session tutorial and onboarding flow.
+4. Polish audio, music, resurrection/death/boss VFX and accessibility.
+5. Add performance settings and the agreed analytics funnel.
+6. Run soft-launch balance and retention instrumentation checks.
+7. In a published test place, smoke-test the Phase 11 reserved-server and
+   Join Friend cross-server network branches before launch.

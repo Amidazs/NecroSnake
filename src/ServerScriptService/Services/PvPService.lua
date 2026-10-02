@@ -25,6 +25,7 @@ local ZONES_FOLDER_NAME = "Zones"
 
 local army_service = nil :: any
 local progression_service = nil :: any
+local party_service = nil :: any
 local did_start = false
 local zone_task: thread? = nil
 
@@ -56,6 +57,28 @@ local function get_owner_player(model: Model): Player?
 		return nil
 	end
 	return Players:GetPlayerByUserId(owner_user_id)
+end
+
+--[[
+	Returns whether two user IDs are protected party allies.
+
+	Args:
+		left_user_id (number): First user ID.
+		right_user_id (number): Second user ID.
+
+	Returns:
+		boolean: True when the Party service marks them as allies.
+]]
+local function are_party_allies(
+	left_user_id: number,
+	right_user_id: number
+): boolean
+	return party_service ~= nil
+		and party_service.are_user_ids_in_same_party ~= nil
+		and party_service.are_user_ids_in_same_party(
+			left_user_id,
+			right_user_id
+		)
 end
 
 local function is_point_in_part_bounds(
@@ -290,6 +313,21 @@ function PvPService.init(
 	progression_service = progression_service_ref
 end
 
+--[[
+	Sets the party service after both services are initialized.
+
+	Args:
+		party_service_ref (any): Party relationship service.
+
+	Returns:
+		None.
+]]
+function PvPService.set_party_service(
+	party_service_ref: any
+)
+	party_service = party_service_ref
+end
+
 function PvPService.is_in_safe_zone(player: Player): boolean
 	update_player_zone(player)
 	return player:GetAttribute("PvPZone") == "SafeZone"
@@ -366,6 +404,12 @@ function PvPService.can_damage(
 	if victim == attacker then
 		return false
 	end
+	if are_party_allies(
+		attacker.UserId,
+		victim.UserId
+	) then
+		return false
+	end
 	if PvPService.is_in_safe_zone(victim)
 		or PvPService.is_spawn_protected(victim)
 	then
@@ -382,6 +426,9 @@ function PvPService.register_damage(
 	local attacker = Players:GetPlayerByUserId(attacker_user_id)
 	local victim = get_owner_player(target)
 	if not attacker or not victim or attacker == victim then
+		return
+	end
+	if are_party_allies(attacker.UserId, victim.UserId) then
 		return
 	end
 
@@ -401,6 +448,10 @@ function PvPService.record_unit_death(model: Model)
 		or killer_user_id == 0
 		or victim_user_id == killer_user_id
 	then
+		return
+	end
+
+	if are_party_allies(victim_user_id, killer_user_id) then
 		return
 	end
 
@@ -445,6 +496,26 @@ function PvPService.mark_entered_safe_zone(player: Player)
 	player:SetAttribute("CombatTaggedUntil", 0)
 	player:SetAttribute("CombatTagged", false)
 	PvPService.clear_spawn_protection(player)
+end
+
+--[[
+	Exposes the exact party-alliance gate for Studio acceptance.
+
+	Args:
+		left_user_id (number): First test user ID.
+		right_user_id (number): Second test user ID.
+
+	Returns:
+		boolean: True when PvP treats the IDs as party allies.
+]]
+function PvPService.debug_are_party_allies(
+	left_user_id: number,
+	right_user_id: number
+): boolean
+	return are_party_allies(
+		left_user_id,
+		right_user_id
+	)
 end
 
 function PvPService.start()

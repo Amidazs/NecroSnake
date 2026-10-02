@@ -23,6 +23,7 @@ export type UnitSnapshot = {
 export type LoadoutCounts = { [string]: number }
 
 local collection_service = nil :: any
+local unit_record_service = nil :: any
 local loadout_by_user_id: { [number]: LoadoutCounts } = {}
 local did_start = false
 
@@ -92,8 +93,12 @@ local function on_set_loadout(
 	)
 end
 
-function BackpackService.init(collection_service_ref: any)
+function BackpackService.init(
+	collection_service_ref: any,
+	unit_record_service_ref: any?
+)
 	collection_service = collection_service_ref
+	unit_record_service = unit_record_service_ref
 end
 
 function BackpackService.start()
@@ -186,10 +191,93 @@ function BackpackService.push_update(player: Player)
 	fire_update(player)
 end
 
+--[[
+	Builds the same stacking key used by the Soul Collection.
+
+	Args:
+		record (UnitSnapshot): Unit record to identify.
+
+	Returns:
+		string: Stable stack key.
+]]
+local function get_unit_stack_key(
+	record: UnitSnapshot
+): string
+	if unit_record_service
+		and unit_record_service.stack_key
+	then
+		return unit_record_service.stack_key(record)
+	end
+
+	return table.concat({
+		record.template_name,
+		record.size_tier or "",
+		record.trait or "",
+		record.evolution_id or "",
+		table.concat(record.ability_ids or {}, ","),
+		record.deployed_master_id or "",
+	}, "|")
+end
+
+--[[
+	Returns one unit's weighted command cost.
+
+	Args:
+		record (UnitSnapshot): Unit to inspect.
+
+	Returns:
+		number: Positive command cost.
+]]
+local function get_record_command_cost(
+	record: UnitSnapshot
+): number
+	if typeof(record.command_cost) == "number" then
+		return math.max(1, record.command_cost)
+	end
+	return 1
+end
+
 function BackpackService.get_loadout_counts(
 	player: Player
 ): LoadoutCounts?
 	return loadout_by_user_id[player.UserId]
+end
+
+--[[
+	Estimates the selected Arena loadout command cost.
+
+	Args:
+		player (Player): Player whose loadout should be scored.
+
+	Returns:
+		number: Selected loadout cost, or total Vault cost when no
+			explicit loadout has been selected.
+]]
+function BackpackService.get_match_loadout_cost(
+	player: Player
+): number
+	local units = get_units(player)
+	local counts = loadout_by_user_id[player.UserId]
+
+	if not counts or next(counts) == nil then
+		local total = 0
+		for _, record in ipairs(units) do
+			total += get_record_command_cost(record)
+		end
+		return total
+	end
+
+	local remaining: LoadoutCounts = copy_loadout(counts)
+	local total = 0
+	for _, record in ipairs(units) do
+		local key = get_unit_stack_key(record)
+		local requested = remaining[key] or 0
+		if requested > 0 then
+			total += get_record_command_cost(record)
+			remaining[key] = requested - 1
+		end
+	end
+	return total
 end
 
 function BackpackService.remove_units_by_key(
