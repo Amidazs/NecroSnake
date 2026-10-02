@@ -18,6 +18,14 @@ local FactionService = require(
 	ServicesFolder:WaitForChild("FactionService")
 )
 
+local EvolutionService = require(
+	ServicesFolder:WaitForChild("EvolutionService")
+)
+
+local WorldEventService = require(
+	ServicesFolder:WaitForChild("WorldEventService")
+)
+
 local ArmyService = require(
 	ServicesFolder:WaitForChild("ArmyService")
 )
@@ -131,6 +139,7 @@ local function main()
 	Remotes.soul_collection()
 	Remotes.progression()
 	Remotes.skills()
+	Remotes.world_event()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")
@@ -153,7 +162,8 @@ local function main()
 		ModelLibraryService,
 		FormationProfileService,
 		UnitRecordService,
-		FactionService
+		FactionService,
+		EvolutionService
 	)
 	PvPService.init(
 		ArmyService,
@@ -185,6 +195,12 @@ local function main()
 	CombatService.start()
 	ArmyRegenService.start()
 	NecromancerSkillService.start()
+
+	WorldEventService.init(
+		ArmyService,
+		EvolutionService
+	)
+	WorldEventService.start()
 
 	TeleportService.init(
 		ArmyService,

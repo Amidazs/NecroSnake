@@ -553,8 +553,12 @@ local function initialize_corpse(model: Model)
 	)
 	if source_kind == "NPC"
 		or source_kind == "NPC_FACTION"
+		or source_kind == "WORLD_EVENT"
 	then
-		model:SetAttribute("NoRaiseReason", "NPC_KILL")
+		local reason = if source_kind == "WORLD_EVENT"
+			then "EVENT_LOSS"
+			else "NPC_KILL"
+		model:SetAttribute("NoRaiseReason", reason)
 		model:Destroy()
 		return
 	end

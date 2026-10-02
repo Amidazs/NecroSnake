@@ -86,5 +86,8 @@ function Remotes.skills(): RemoteEvent
 	return Remotes.get_or_create_event("NecromancerSkills")
 end
 
+function Remotes.world_event(): RemoteEvent
+	return Remotes.get_or_create_event("WorldEvent")
+end
 
 return Remotes

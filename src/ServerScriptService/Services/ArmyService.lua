@@ -19,6 +19,7 @@ local model_library_service = nil :: any
 local formation_profile_service = nil :: any
 local unit_record_service = nil :: any
 local faction_service = nil :: any
+local evolution_service = nil :: any
 local did_init = false
 
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
@@ -578,12 +579,14 @@ function ArmyService.init(
 	model_library,
 	formation_profile_service_ref: any?,
 	unit_record_service_ref: any?,
-	faction_service_ref: any?
+	faction_service_ref: any?,
+	evolution_service_ref: any?
 )
 	model_library_service = model_library
 	formation_profile_service = formation_profile_service_ref
 	unit_record_service = unit_record_service_ref
 	faction_service = faction_service_ref
+	evolution_service = evolution_service_ref
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)
@@ -854,6 +857,11 @@ function ArmyService.spawn_from_snapshot(
 			then
 				faction_service.restore_identity(model)
 			end
+			if evolution_service
+				and evolution_service.apply_model_evolution
+			then
+				evolution_service.apply_model_evolution(model)
+			end
 			table.insert(spawned, model)
 		end
 	end
@@ -983,6 +991,11 @@ function ArmyService.try_raise_dead(
 				and faction_service.restore_identity
 			then
 				faction_service.restore_identity(spawned)
+			end
+			if evolution_service
+				and evolution_service.apply_model_evolution
+			then
+				evolution_service.apply_model_evolution(spawned)
 			end
 		end
 	end

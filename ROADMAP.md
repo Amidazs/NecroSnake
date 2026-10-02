@@ -701,19 +701,45 @@ Work:
 
 ## Phase 9 - Events and undead evolution
 
+**Status:** COMPLETE - reusable Soulstorm events and transformed-unit
+persistence acceptance GREEN on 2 October 2026.
+
 **Goal:** create high-risk ways to transform existing valuable units.
 
 Work:
-- Event framework.
-- Lightning/storm event prototype.
-- Eligible-unit transformation rules.
-- Survival/failure risk.
-- Master/clone evolution persistence.
-- Event telegraphing.
-- Limited-time map conditions.
+- [x] Event framework.
+- [x] Lightning/storm event prototype.
+- [x] Eligible-unit transformation rules.
+- [x] Survival/failure risk.
+- [x] Master/clone evolution persistence.
+- [x] Event telegraphing.
+- [x] Limited-time map conditions.
 
 **Acceptance:**
-- Player can intentionally bring a valued unit into an event, risk losing it, transform it, extract it and register the transformed unit as a new Master.
+- [x] Player can intentionally bring a valued unit into an event, risk
+  losing it, transform it, extract it and register the transformed unit
+  as a new Master.
+
+**2 October 2026 Phase 9 playtest evidence:**
+- Added a reusable server event lifecycle with warning, active and ended
+  states, timed cleanup and client state broadcasts.
+- The first event, Soulstorm, creates a readable world zone plus a
+  top-screen warning/countdown and per-unit attunement progress.
+- Soulstorm lightning creates real failure risk while a unit is exposed.
+  Units killed by the event are destroyed and leave no Raiseable corpse.
+- Only secured persistent, non-boss, non-evolved owned undead can evolve.
+  Starter-loan units, major bosses and already evolved units are rejected.
+- Continuous exposure transforms an eligible survivor into Stormcharged.
+  Leaving the event zone clears incomplete exposure progress.
+- Stormcharged currently grants +15% damage, +10% health, +8% movement
+  speed, 8% faster attack cooldown and +0.04 Defense, with electric VFX.
+- Evolution identity survives army extraction, Soul Vault storage,
+  Master imprinting, cloning, redeployment and a profile save/reload.
+- The final deterministic Studio acceptance returned PHASE9_FINAL_GREEN
+  for lifecycle, telegraphing, eligibility, risk, transformation,
+  extraction, Master/clone persistence and no-Raise event deaths.
+- A fresh canonical-place production run loaded WorldEventService, normal
+  world spawning and the existing UI/services without runtime errors.
 
 ## Phase 10 - Proper Arena world and Base
 
@@ -791,17 +817,18 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 9: Events and undead evolution.**
+**Begin Phase 10: Proper Arena world and Base.**
 
-Phase 8 now makes major bosses meaningful capture targets without letting
-boss ownership replace normal army composition. Phase 9 should create
-high-risk opportunities to transform already valuable undead.
+Phase 9 completes the planned core progression/combat feature set through
+events and persistent undead evolution. The R15 unit-art roster can be
+produced in parallel while Phase 10 replaces the recovery world with the
+authored Arena and useful player Base.
 
-The first Phase 9 slice is:
-1. Define the reusable event framework and event lifecycle.
-2. Build the first lightning/storm event with clear world telegraphing.
-3. Define which owned undead are eligible for transformation.
-4. Add explicit survival and failure risk during transformation.
-5. Preserve transformed identity through Master and clone persistence.
-6. Make event entry, danger, success and extraction readable to the player.
-7. Validate a full valued-unit transformation and extraction loop.
+The first Phase 10 slice is:
+1. Establish the authored Arena layout and four faction regions.
+2. Create elevation, long sightlines, ambush routes and retreat routes.
+3. Reserve dangerous high-reward boss and event spaces.
+4. Build the Base layout around the existing Soul Foundry systems.
+5. Place Formation Editor, skill-loadout, Codex and unit-display areas.
+6. Add machine/building upgrade presentation and boss-trophy spaces.
+7. Playtest traversal, risk/reward routing and Base usability.
