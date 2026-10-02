@@ -5,6 +5,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local BossAbilityService = require(
+	script.Parent:WaitForChild("BossAbilityService")
+)
+
 local Remotes = require(
 	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
 )
@@ -12,6 +16,7 @@ local Remotes = require(
 local CombatService = {}
 
 local CORPSE_LIFETIME_SECONDS = 20
+local BOSS_CORPSE_LIFETIME_SECONDS = 30
 local CLAIM_SECONDS = 6
 local MAX_FAILED_RAISES = 3
 local RAISE_DISTANCE = 14
@@ -337,6 +342,18 @@ local function handle_raise(player: Player, model: Model)
 	local success, status, chance, command_cost =
 		army_service.try_raise_dead(player, model)
 
+	if status == "BOSS_LIMIT" then
+		send_result(player, {
+			kind = "raise",
+			status = status,
+			chance = chance,
+			commandCost = command_cost,
+			message = "Only one major boss can be deployed at a time.",
+		})
+		processing[model] = nil
+		return
+	end
+
 	if status == "FULL" then
 		local used = army_service.get_used_command_capacity(player)
 		local maximum = army_service.get_command_capacity(player)
@@ -437,7 +454,9 @@ local function create_raise_prompt(model: Model, root: BasePart)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "NecroRaisePrompt"
 	prompt.ActionText = "Raise"
-	prompt.ObjectText = model.Name
+	prompt.ObjectText = if model:GetAttribute("IsBoss") == true
+		then model.Name .. " - Major Boss"
+		else model.Name
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.HoldDuration = RAISE_HOLD_SECONDS
@@ -532,28 +551,12 @@ local function initialize_corpse(model: Model)
 	local source_kind = model:GetAttribute(
 		"LastDamageSourceKind"
 	)
-	local faction_battle_corpse = false
-	if source_kind == "NPC" then
+	if source_kind == "NPC"
+		or source_kind == "NPC_FACTION"
+	then
 		model:SetAttribute("NoRaiseReason", "NPC_KILL")
 		model:Destroy()
 		return
-	elseif source_kind == "NPC_FACTION" then
-		local victim_faction = model:GetAttribute("FactionId")
-		local killer_faction = model:GetAttribute(
-			"LastHitFactionId"
-		)
-		local is_wild = typeof(former_owner) ~= "number"
-			or former_owner <= 0
-		local hostile_factions = typeof(victim_faction) == "string"
-			and typeof(killer_faction) == "string"
-			and victim_faction ~= killer_faction
-		if not is_wild or not hostile_factions then
-			model:SetAttribute("NoRaiseReason", "NPC_KILL")
-			model:Destroy()
-			return
-		end
-		faction_battle_corpse = true
-		model:SetAttribute("FactionBattleCorpse", true)
 	end
 
 	local root = get_root(model)
@@ -570,20 +573,19 @@ local function initialize_corpse(model: Model)
 
 	model:SetAttribute(ATTR_CORPSE, true)
 	model:SetAttribute(ATTR_CORPSE_CREATED, created)
+	local corpse_lifetime = CORPSE_LIFETIME_SECONDS
+	if model:GetAttribute("IsBoss") == true then
+		corpse_lifetime = BOSS_CORPSE_LIFETIME_SECONDS
+	end
 	model:SetAttribute(
 		ATTR_CORPSE_EXPIRES,
-		created + CORPSE_LIFETIME_SECONDS
+		created + corpse_lifetime
 	)
 	model:SetAttribute(ATTR_CLAIM_USER_ID, claim_user_id)
 	model:SetAttribute(
 		ATTR_CLAIM_EXPIRES,
-		if faction_battle_corpse
-			then created
-			else created + CLAIM_SECONDS
+		created + CLAIM_SECONDS
 	)
-	if faction_battle_corpse then
-		model:SetAttribute("CorpseClaimOpen", true)
-	end
 	model:SetAttribute(ATTR_RAISE_FAILURES, 0)
 	model:SetAttribute(ATTR_MAX_RAISE_FAILURES, MAX_FAILED_RAISES)
 
@@ -616,6 +618,7 @@ local function initialize_corpse(model: Model)
 	root.Anchored = true
 
 	create_corpse_soul(root)
+	BossAbilityService.decorate_corpse(model, root)
 	update_corpse_visual(model, 0)
 	create_raise_prompt(model, root)
 
@@ -625,7 +628,7 @@ local function initialize_corpse(model: Model)
 		end
 	end)
 
-	task.delay(CORPSE_LIFETIME_SECONDS, function()
+	task.delay(corpse_lifetime, function()
 		if model.Parent ~= nil and model:GetAttribute(ATTR_CORPSE) == true then
 			destroy_corpse(model, "EXPIRED")
 		end

@@ -9,6 +9,9 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ArrowTracerPool = require(Shared:WaitForChild("ArrowTracerPool"))
+local BossAbilityService = require(
+	script.Parent:WaitForChild("BossAbilityService")
+)
 
 local NPCService = {}
 
@@ -2072,7 +2075,18 @@ function NPCService.start()
 							local t = now()
 
 							if (t - npc_unit.last_attack) >= cooldown then
+								local boss_used = BossAbilityService.try_use_signature(
+									npc_unit.model,
+									state.target_model,
+									{
+										source_kind = "NPC_FACTION",
+										faction_id = g.faction_id,
+									}
+								)
 								npc_unit.last_attack = t
+								if boss_used then
+									continue
+								end
 
 								local final_damage = compute_damage_after_defense(
 									state.target_model,

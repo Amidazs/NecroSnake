@@ -24,6 +24,8 @@ local did_init = false
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
 local DEFAULT_STARTER_TEMPLATE = "Skeleton"
 local DEFAULT_STARTER_COUNT = 3
+local MAJOR_BOSS_DEPLOYMENT_LIMIT = 1
+local BOSS_MAX_RAISE_CHANCE = 0.45
 
 -- Attributes written by ModelLibraryService on spawned models.
 local ATTR_TEMPLATE_NAME = "TemplateName"
@@ -453,6 +455,33 @@ local function get_unit_command_cost(
 	return cost
 end
 
+local function is_boss_template(template_name: string): boolean
+	if not model_library_service
+		or not model_library_service.get_unit_stats
+	then
+		return false
+	end
+	local stats = model_library_service.get_unit_stats(template_name)
+	return stats ~= nil and stats.IsBoss == true
+end
+
+local function count_deployed_bosses(player: Player): number
+	local count = 0
+	for _, unit in ipairs(armies_by_user_id[player.UserId] or {}) do
+		if unit.model
+			and unit.model.Parent ~= nil
+			and unit.model:GetAttribute("IsBoss") == true
+		then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function boss_slot_available(player: Player): boolean
+	return count_deployed_bosses(player) < MAJOR_BOSS_DEPLOYMENT_LIMIT
+end
+
 local function get_model_command_cost(model: Model): number
 	local attr = model:GetAttribute("CommandCost")
 	if typeof(attr) == "number" then
@@ -664,6 +693,9 @@ function ArmyService.summon_unit_at(
 	assert(model_library_service, "ArmyService missing ModelLibraryService")
 
 	local size_tier = overrides and overrides.force_size_tier or nil
+	if is_boss_template(template_name) and not boss_slot_available(player) then
+		return nil
+	end
 	local estimated_cost = get_unit_command_cost(template_name, size_tier)
 	local used = ArmyService.get_used_command_capacity(player)
 	if used + estimated_cost > ArmyService.get_command_capacity(player) then
@@ -712,6 +744,11 @@ function ArmyService.summon_units(
 	local start_index = (spawn_index_by_user_id[player.UserId] or 0) + 1
 	for i = 0, count - 1 do
 		local size_tier = overrides and overrides.force_size_tier or nil
+		if is_boss_template(template_name)
+			and not boss_slot_available(player)
+		then
+			break
+		end
 		local estimated_cost = get_unit_command_cost(template_name, size_tier)
 		local used = ArmyService.get_used_command_capacity(player)
 		if used + estimated_cost > ArmyService.get_command_capacity(player) then
@@ -846,10 +883,14 @@ function ArmyService.get_raise_chance(
 		bonus = 0
 	end
 
+	local max_chance = MAX_RAISE_CHANCE_FROM_PROGRESSION
+	if dead_model:GetAttribute("IsBoss") == true then
+		max_chance = BOSS_MAX_RAISE_CHANCE
+	end
 	return clamp(
 		base_chance + bonus,
 		MIN_RAISE_CHANCE,
-		MAX_RAISE_CHANCE_FROM_PROGRESSION
+		max_chance
 	)
 end
 
@@ -871,6 +912,11 @@ function ArmyService.try_raise_dead(
 		dead_model
 	)
 	local chance = ArmyService.get_raise_chance(player, dead_model)
+	if dead_model:GetAttribute("IsBoss") == true
+		and not boss_slot_available(player)
+	then
+		return false, "BOSS_LIMIT", chance, cost
+	end
 	if not can_add then
 		return false, "FULL", chance, cost
 	end

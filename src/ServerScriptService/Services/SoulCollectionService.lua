@@ -27,6 +27,8 @@ local BASE_CLONE_SECONDS = 60
 local MACHINE_SPEED_PER_LEVEL = 0.20
 local PROCESS_INTERVAL_SECONDS = 2
 local SAVE_DEBOUNCE_SECONDS = 1
+local BOSS_CLONE_COST_MULTIPLIER = 3
+local BOSS_CLONE_TIME_MULTIPLIER = 3
 
 local BASE_UPGRADE_COST: { [number]: number } = {
 	[2] = 100,
@@ -418,6 +420,18 @@ local function get_record_command_cost(record: UnitRecord): number
 	return 1
 end
 
+local function is_boss_record(record: UnitRecord): boolean
+	if not model_library_service
+		or not model_library_service.get_unit_stats
+	then
+		return false
+	end
+	local stats = model_library_service.get_unit_stats(
+		record.template_name
+	)
+	return stats ~= nil and stats.IsBoss == true
+end
+
 local function get_clone_cost(record: UnitRecord): number
 	local cost = get_record_command_cost(record) * 10
 	if record.size_tier == "Giant" then
@@ -428,6 +442,9 @@ local function get_clone_cost(record: UnitRecord): number
 	end
 	if record.evolution_id then
 		cost += 10
+	end
+	if is_boss_record(record) then
+		cost *= BOSS_CLONE_COST_MULTIPLIER
 	end
 	return math.max(5, cost)
 end
@@ -457,6 +474,9 @@ local function get_clone_seconds(
 ): number
 	local base = BASE_CLONE_SECONDS
 		* get_record_command_cost(record)
+	if is_boss_record(record) then
+		base *= BOSS_CLONE_TIME_MULTIPLIER
+	end
 	local speed = 1
 		+ ((machine.level - 1) * MACHINE_SPEED_PER_LEVEL)
 	return math.max(20, math.floor(base / speed))

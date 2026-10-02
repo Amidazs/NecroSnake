@@ -7,6 +7,9 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ArrowTracerPool = require(Shared:WaitForChild("ArrowTracerPool"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local BossAbilityService = require(
+	script.Parent:WaitForChild("BossAbilityService")
+)
 
 local ArmyAIService = {}
 
@@ -731,18 +734,33 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 	end
 
 	local t = now()
-	if (t - s.last_attack) < cooldown then
-		return
-	end
-
-	s.last_attack = t
-
 	if typeof(owner_user_id) == "number"
 		and pvp_service
 		and pvp_service.register_damage
 	then
 		pvp_service.register_damage(owner_user_id, target)
 	end
+
+	local boss_used = false
+	if typeof(owner_user_id) == "number" then
+		boss_used = BossAbilityService.try_use_signature(
+			attacker,
+			target,
+			{
+				source_kind = "PLAYER_ARMY",
+				owner_user_id = owner_user_id,
+			}
+		)
+	end
+	if boss_used then
+		s.last_attack = t
+		return
+	end
+	if (t - s.last_attack) < cooldown then
+		return
+	end
+
+	s.last_attack = t
 
 	-- Important: mark who got the last hit BEFORE applying damage.
 	stamp_last_hit_owner(attacker, target)

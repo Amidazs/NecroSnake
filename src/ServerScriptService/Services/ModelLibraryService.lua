@@ -17,6 +17,9 @@ local Workspace = game:GetService("Workspace")
 
 local NpcAnimationController =
 	require(script.Parent.Parent.Systems.NpcAnimationController)
+local BossAbilityService = require(
+	script.Parent:WaitForChild("BossAbilityService")
+)
 
 local ModelLibraryService = {}
 
@@ -26,8 +29,8 @@ local NPC_FOLDER_NAME = "NPCs"
 local COLLISION_GROUP_UNITS = "Units"
 local COLLISION_GROUP_LEADERS = "Leaders"
 
--- Attributes written to spawned NPC models so other systems (raising, UI, etc.)
--- can reliably identify what the model is, even if Model.Name is a display name.
+-- Attributes written to spawned NPC models so other systems can identify
+-- the template even when Model.Name is a generated display name.
 local ATTR_TEMPLATE_NAME = "TemplateName"
 local ATTR_TEMPLATE_KEY = "TemplateKey"
 local ATTR_SIZE_TIER = "SizeTier"
@@ -213,14 +216,23 @@ local TRAIT_MODS: { [string]: number } = {
 	Frenzied = 0.10,
 }
 
-local SIZE_MULTS: { [string]: { scale: number, hp: number, dmg: number, spd: number } } =
+local SIZE_MULTS: {
+	[string]: { scale: number, hp: number, dmg: number, spd: number },
+} =
 	{
 		Normal = { scale = 1.0, hp = 1.0, dmg = 1.0, spd = 1.0 },
 		Small = { scale = 0.8, hp = 0.8, dmg = 0.85, spd = 1.12 },
 		Giant = { scale = 1.35, hp = 1.55, dmg = 1.25, spd = 0.92 },
 	}
 
-local TRAIT_MULTS: { [string]: { hp: number, dmg: number, spd: number, defense: number } } =
+local TRAIT_MULTS: {
+	[string]: {
+		hp: number,
+		dmg: number,
+		spd: number,
+		defense: number,
+	},
+} =
 	{
 		None = { hp = 1.0, dmg = 1.0, spd = 1.0, defense = 0 },
 		Tough = { hp = 1.25, dmg = 1.0, spd = 0.95, defense = 0.2 },
@@ -486,7 +498,10 @@ local function ensure_collision_groups_exist()
 	)
 end
 
-local function set_descendants_collision_group(model: Model, group_name: string)
+local function set_descendants_collision_group(
+	model: Model,
+	group_name: string
+)
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CollisionGroup = group_name
@@ -545,9 +560,10 @@ local function create_anti_climb_hat(model: Model)
 	hat.Massless = true
 	hat.Size = Vector3.new(radius * 2, ANTI_CLIMB_HAT_THICKNESS, radius * 2)
 
-	-- Position above HRP; this doesn’t need to be perfect, just consistently above
-	-- the body so other units can’t stand on shoulders.
-	local y_offset = (hrp.Size.Y * 0.5) + (hum.HipHeight) + ANTI_CLIMB_HAT_HEIGHT_OFFSET
+	-- Keep the anti-climb hat consistently above the unit's body.
+	local y_offset = (hrp.Size.Y * 0.5)
+		+ hum.HipHeight
+		+ ANTI_CLIMB_HAT_HEIGHT_OFFSET
 	hat.CFrame = hrp.CFrame * CFrame.new(0, y_offset, 0)
 
 	local weld = Instance.new("WeldConstraint")
@@ -639,7 +655,10 @@ local function write_spawn_identity_attributes(
 	trait_name: string
 )
 	model:SetAttribute(ATTR_TEMPLATE_NAME, canonical_template_name)
-	model:SetAttribute(ATTR_TEMPLATE_KEY, normalize_template_key(canonical_template_name))
+	model:SetAttribute(
+		ATTR_TEMPLATE_KEY,
+		normalize_template_key(canonical_template_name)
+	)
 	model:SetAttribute(ATTR_SIZE_TIER, size_name)
 	model:SetAttribute(ATTR_TRAIT, trait_name)
 end
@@ -712,9 +731,18 @@ local function apply_stats_size_traits(
 	set_model_scale_to(model, scale)
 
 	-- Persist identity for raising logic before we overwrite Model.Name.
-	write_spawn_identity_attributes(model, canonical_template_name, size_name, trait_name)
+	write_spawn_identity_attributes(
+		model,
+		canonical_template_name,
+		size_name,
+		trait_name
+	)
 
-	model.Name = build_display_name(canonical_template_name, size_name, trait_name)
+	model.Name = build_display_name(
+		canonical_template_name,
+		size_name,
+		trait_name
+	)
 
 	return size_name, trait_name
 end
@@ -862,6 +890,7 @@ function ModelLibraryService.spawn_from_template(
 
 	-- Apply stats + size + traits first so SizeScale exists.
 	apply_stats_size_traits(clone, canonical_name, mods)
+	BossAbilityService.configure_boss(clone)
 
 	-- Add anti-climb collider (invisible hat) while keeping normal collisions.
 	create_anti_climb_hat(clone)

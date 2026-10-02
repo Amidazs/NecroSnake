@@ -1,7 +1,7 @@
 # NecroSnake Roadmap
 
-**Roadmap baseline:** 1 October 2026  
-**Canonical recovery commit:** `d1beef14ee21e0cff523a5de473b91f68d63aa9f`  
+**Roadmap baseline:** 1 October 2026
+**Canonical recovery commit:** `d1beef14ee21e0cff523a5de473b91f68d63aa9f`
 **Canonical Studio place:** `place.rbxl`
 
 ## Vision
@@ -551,8 +551,7 @@ Work:
 **Acceptance:**
 - [x] Two players at the same capacity can deliberately build visibly
   different armies.
-- [x] Autonomous faction battles create useful corpse opportunities
-  without player initiation.
+- [x] Autonomous faction battles visibly demonstrate faction warfare.
 
 **2 October 2026 Phase 7 playtest evidence:**
 - Four regional factions now spawn from faction-specific rosters:
@@ -561,14 +560,13 @@ Work:
   elite and rare faction units with faction/role visual markers.
 - Hostile factions now seek and fight each other rather than treating all
   wild NPC groups as interchangeable prey.
-- A natural faction-war run created five player-independent battlefield
-  corpses. Every sampled corpse was immediately claimable and had a Raise
-  prompt while retaining faction and role identity.
-- The deterministic acceptance harness Raised a faction-battle corpse,
-  preserved faction/role identity, then preserved it again through the
-  backpack snapshot and restore path.
-- The earlier corpse rule remains intact: player-owned undead killed by
-  NPCs vanish immediately and cannot be Raised again.
+- A natural faction-war run confirmed hostile factions independently seek
+  and fight one another without player initiation.
+- The Phase 8 anti-farming rule supersedes the earlier faction-corpse rule:
+  any unit killed by an NPC or faction NPC now vanishes and cannot be
+  Raised by a player.
+- Faction and role identity still persist when a player earns the kill and
+  successfully Raises the defeated unit.
 - Support units healed damaged faction allies during the live AI test.
 - Cavalry and Reaver elite identities were spawned and retained their
   dedicated role visuals and combat attributes.
@@ -580,20 +578,44 @@ Work:
 
 ## Phase 8 - Boss ownership and elite encounters
 
+**Status:** COMPLETE - shared boss abilities, ownership rules and boss
+capture acceptance GREEN on 2 October 2026.
+
 **Goal:** make bosses aspirational army prizes, not only loot sources.
 
 Work:
-- Boss ability framework shared between enemy and owned state.
-- Boss Raise difficulty.
-- Boss corpse presentation.
-- Boss cloning cost/time.
-- One-major-boss deployment restriction.
-- Boss command/AI behaviour within formations.
-- Boss-specific VFX/readability.
+- [x] Boss ability framework shared between enemy and owned state.
+- [x] Boss Raise difficulty.
+- [x] Boss corpse presentation.
+- [x] Boss cloning cost/time.
+- [x] One-major-boss deployment restriction.
+- [x] Boss command/AI behaviour within formations.
+- [x] Boss-specific VFX/readability.
 
 **Acceptance:**
-- Defeating and successfully raising a boss produces an owned boss with recognisably the same signature abilities.
-- Owned bosses are powerful but do not invalidate army composition.
+- [x] Defeating and successfully raising a boss produces an owned boss
+  with recognisably the same signature abilities.
+- [x] Owned bosses are powerful but do not invalidate army composition.
+
+**2 October 2026 Phase 8 playtest evidence:**
+- Grave Baron now uses Soul Nova in both enemy and Raised-owned states.
+- Crypt Warden now uses Grave Chain with damage and a temporary slow.
+- Boss corpses receive a dedicated aura/light, a Major Boss Raise prompt
+  and a 30-second decision window.
+- Boss Raise chance is deliberately difficult: the normal 25% base chance
+  can improve through progression but is capped at 45%.
+- Boss cloning costs three times normal essence and takes three times the
+  normal base machine time before machine-speed modifiers.
+- Only one major boss can be deployed per player. Normal army units still
+  deploy normally alongside that boss and retain weighted Command Capacity.
+- Raised bosses retain their signature ability and Personal Guard cohort.
+- NPC and faction-NPC kills of any unit destroy the victim immediately.
+  They never create a player-raiseable corpse, preventing passive farming.
+- The deterministic Studio acceptance passed enemy abilities, boss corpse
+  presentation, boss Raise, owned abilities, the one-boss limit and normal
+  composition in the same production runtime.
+- A fresh canonical-place playtest loaded the full game runtime and UI with
+  the Phase 8 services active and no runtime errors.
 
 ## Phase 9 - Events and undead evolution
 
@@ -687,22 +709,17 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 7: Factions and army identity.**
+**Begin Phase 9: Events and undead evolution.**
 
-Phase 6 now supplies the persistent progression and tactical-skill layer.
-Phase 7 should make battlefield collection strategically interesting by making
-different NPC factions produce visibly and mechanically different army parts.
+Phase 8 now makes major bosses meaningful capture targets without letting
+boss ownership replace normal army composition. Phase 9 should create
+high-risk opportunities to transform already valuable undead.
 
-The first Phase 7 slice is:
-1. Define the initial autonomous factions and their regional identities.
-2. Give each faction a readable mix of frontline, ranged, support and special
-   roles.
-3. Make factions fight one another without player initiation.
-4. Preserve each unit's combat role after it is Raised.
-5. Add faction-specific rare and elite units without bypassing weighted
-   Command Capacity.
-6. Make silhouettes, weapons and combat behaviour readable at distance.
-7. Validate that equal-capacity players can deliberately build meaningfully
-   different army compositions.
-8. Validate that autonomous faction battles generate usable corpse
-   opportunities for nearby Necromancers.
+The first Phase 9 slice is:
+1. Define the reusable event framework and event lifecycle.
+2. Build the first lightning/storm event with clear world telegraphing.
+3. Define which owned undead are eligible for transformation.
+4. Add explicit survival and failure risk during transformation.
+5. Preserve transformed identity through Master and clone persistence.
+6. Make event entry, danger, success and extraction readable to the player.
+7. Validate a full valued-unit transformation and extraction loop.
