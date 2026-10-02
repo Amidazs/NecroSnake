@@ -2,7 +2,8 @@
 -- YasusBiomeSpawner.server.lua
 -- Spawns stylized trees + bushes from the Yasu's pack across Terrain.
 -- - Uses SpawnBounds (if present) to define X/Z placement bounds.
--- - Raycasts down to Terrain and rejects steep slopes, high elevations, and water.
+-- - Raycasts down to Terrain and rejects steep slopes, high elevations,
+--   and water.
 -- - Applies random yaw and normalizes size to a target height range.
 -- - Anchors all parts; only trunks collide (blocks movement without snagging).
 
@@ -14,8 +15,15 @@ local PACK_FOLDER_NAME = "Yasu's_Stylized_Tree_Pack"
 local BIOME_FOLDER_NAME = "Biomes"
 local FOLIAGE_FOLDER_NAME = "Foliage"
 
-local MAX_PLACEMENTS = 900
+local MAX_PLACEMENTS = 300
 local MIN_SPACING = 18
+
+local MIRE_MIN_X = 180
+local MIRE_MAX_X = 820
+local MIRE_MIN_Z = 1180
+local MIRE_MAX_Z = 1820
+local MIRE_ROUTE_SUM = 2000
+local MIRE_ROUTE_CLEARANCE = 100
 
 local RAY_START_HEIGHT = 800
 local RAY_DISTANCE = 2200
@@ -36,6 +44,13 @@ local MAX_ALLOWED_TEMPLATE_HEIGHT = 120
 -- Strong water detection using Terrain voxels around the hit point.
 local WATER_CHECK_HALF_SIZE = 2
 local WATER_CHECK_RESOLUTION = 4
+
+local FOLIAGE_PART_MATERIALS = {
+	[Enum.Material.Grass] = true,
+	[Enum.Material.LeafyGrass] = true,
+	[Enum.Material.Ground] = true,
+	[Enum.Material.Mud] = true,
+}
 
 -- Part-name heuristics for collisions.
 local TRUNK_NAME_KEYWORDS = {"trunk", "stem", "root"}
@@ -61,7 +76,10 @@ end
 
 local function strip_scripts(root: Instance)
 	for _, inst in ipairs(root:GetDescendants()) do
-		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
+		if inst:IsA("Script")
+			or inst:IsA("LocalScript")
+			or inst:IsA("ModuleScript")
+		then
 			inst:Destroy()
 		end
 	end
@@ -78,7 +96,10 @@ local function ensure_primary_part(model: Model)
 	end
 end
 
-local function contains_any_keyword(name_lower: string, keywords: {string}): boolean
+local function contains_any_keyword(
+	name_lower: string,
+	keywords: { string }
+): boolean
 	for _, kw in ipairs(keywords) do
 		if string.find(name_lower, kw, 1, true) then
 			return true
@@ -115,6 +136,34 @@ local function set_foliage_physics(model: Model)
 	end
 end
 
+--[[
+	Restricts the legacy tree pack to the living Mirebound biome.
+
+	Args:
+		x (number): Candidate world X coordinate.
+		z (number): Candidate world Z coordinate.
+
+	Returns:
+		boolean: True when authored foliage is allowed here.
+]]
+local function is_foliage_position_allowed(
+	x: number,
+	z: number
+): boolean
+	local inside_mire = x >= MIRE_MIN_X
+		and x <= MIRE_MAX_X
+		and z >= MIRE_MIN_Z
+		and z <= MIRE_MAX_Z
+	if not inside_mire then
+		return false
+	end
+
+	local route_distance = math.abs(
+		(x + z) - MIRE_ROUTE_SUM
+	)
+	return route_distance >= MIRE_ROUTE_CLEARANCE
+end
+
 local function get_bounds_from_spawn_bounds(): (number, number, number, number)
 	local bounds = Workspace:FindFirstChild("SpawnBounds", true)
 	if bounds and bounds:IsA("BasePart") then
@@ -133,7 +182,11 @@ local function get_bounds_from_spawn_bounds(): (number, number, number, number)
 	return -512, 512, -512, 512
 end
 
-local function too_close(points: {Vector3}, candidate: Vector3, min_spacing: number): boolean
+local function too_close(
+	points: { Vector3 },
+	candidate: Vector3,
+	min_spacing: number
+): boolean
 	local min_sq = min_spacing * min_spacing
 	for _, p in ipairs(points) do
 		local dx = p.X - candidate.X
@@ -176,7 +229,11 @@ local function is_water_at_position(pos: Vector3): boolean
 	return false
 end
 
-local function raycast_to_terrain(x: number, z: number, blacklist: {Instance}): RaycastResult?
+local function raycast_to_terrain(
+	x: number,
+	z: number,
+	blacklist: { Instance }
+): RaycastResult?
 	local origin = Vector3.new(x, RAY_START_HEIGHT, z)
 	local direction = Vector3.new(0, -RAY_DISTANCE, 0)
 
@@ -193,6 +250,13 @@ local function raycast_to_terrain(x: number, z: number, blacklist: {Instance}): 
 	local hit_terrain = hit.Instance:IsA("Terrain")
 	local hit_floor = hit.Instance:IsA("BasePart") and hit.Instance.CanCollide
 	if not hit_terrain and not hit_floor then
+		return nil
+	end
+
+	if hit_floor
+		and hit.Instance:IsA("BasePart")
+		and not FOLIAGE_PART_MATERIALS[hit.Instance.Material]
+	then
 		return nil
 	end
 
@@ -218,7 +282,10 @@ local function raycast_to_terrain(x: number, z: number, blacklist: {Instance}): 
 	return hit
 end
 
-local function get_pack_models_folder(pack: Instance, folder_name: string): Folder?
+local function get_pack_models_folder(
+	pack: Instance,
+	folder_name: string
+): Folder?
 	local container = pack:FindFirstChild(folder_name)
 	if not (container and container:IsA("Folder")) then
 		return nil
@@ -310,7 +377,10 @@ end
 local function main()
 	local pack = ServerStorage:FindFirstChild(PACK_FOLDER_NAME)
 	if not pack then
-		warn(("[YasusBiomeSpawner] Pack not found: ServerStorage.%s"):format(PACK_FOLDER_NAME))
+		warn(
+			("[YasusBiomeSpawner] Pack not found: ServerStorage.%s")
+				:format(PACK_FOLDER_NAME)
+		)
 		return
 	end
 
@@ -358,6 +428,10 @@ local function main()
 		local x = min_x + (math.random() * (max_x - min_x))
 		local z = min_z + (math.random() * (max_z - min_z))
 
+		if not is_foliage_position_allowed(x, z) then
+			continue
+		end
+
 		local hit = raycast_to_terrain(x, z, blacklist)
 		if hit then
 			local candidate = Vector3.new(x, hit.Position.Y + SURFACE_OFFSET, z)
@@ -370,8 +444,18 @@ local function main()
 		end
 	end
 
-	print(("[YasusBiomeSpawner] Templates=%d | Spawned=%d | Attempts=%d | MaxY=%d | TargetH=[%d,%d]")
-		:format(#templates, #placed, attempts, MAX_SPAWN_Y, TARGET_HEIGHT_MIN, TARGET_HEIGHT_MAX))
+	local summary = (
+		"[YasusBiomeSpawner] Templates=%d | Spawned=%d | "
+			.. "Attempts=%d | MaxY=%d | TargetH=[%d,%d]"
+	):format(
+		#templates,
+		#placed,
+		attempts,
+		MAX_SPAWN_Y,
+		TARGET_HEIGHT_MIN,
+		TARGET_HEIGHT_MAX
+	)
+	print(summary)
 end
 
 main()

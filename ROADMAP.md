@@ -766,6 +766,38 @@ Base:
 - The world naturally produces decisions about risk, scouting, faction hunting and PvP.
 - The Base is useful without becoming where most playtime is spent.
 
+**2 October 2026 Phase 10 playtest evidence:**
+- Phase 10 is GREEN in the canonical Studio place.
+- The Arena now has four authored faction regions: Ossuary Legion,
+  Mirebound Brood, Ashen Covenant and Grave Court.
+- The regions use different elevations, materials, landmarks and sightlines,
+  with dedicated faction approach roads and four outer perimeter
+  ambush/retreat passes.
+- No-jump pathfinding from the central arrival area to all four faction
+  regions returned Enum.PathStatus.Success, matching the game's
+  jump-disabled player movement.
+- Four high-reward boss arenas and the dedicated Soulstorm Basin are
+  physically reserved in the Arena.
+- The legacy tree pack is now restricted to Mirebound. The accepted run
+  spawned 300 foliage models there with zero spill into Ossuary, Ashen,
+  Grave Court or the central crossroads.
+- The Base now has seven physical facilities: Soul Foundry and Cloning
+  Hall, Formation War Room, Skill Reliquary, Necromancer Codex,
+  Master Gallery, Boss Trophy Hall and Foundry Upgrade Forge.
+- The Base includes three clone chambers, six Master display slots, six
+  unit display slots and four boss-trophy plinths.
+- Base presentation is streaming-aware. Returning from the Arena
+  repopulated all 19 personal machine/unit/Master/trophy labels from the
+  player's persistent Soul Collection snapshot.
+- Physical station prompts successfully opened the existing Soul Foundry,
+  Formation Editor and skill-loadout interfaces. Codex and Trophy Hall
+  prompts also displayed live player-specific summaries.
+- Final production playtest loaded Soul Collection, Backpack, Formation,
+  World Event and Teleport services with no runtime errors observed.
+- A fresh independent reopen of the saved place.rbxl verified four faction
+  regions, 15 routes, four boss zones, seven Base stations, seven prompts,
+  the Soulstorm region and the latest streaming-aware Base client.
+
 ## Phase 11 - Matchmaking, friends and social play
 
 **Goal:** keep always-on PvP viable while preserving Roblox friend play.
@@ -817,18 +849,18 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 10: Proper Arena world and Base.**
+**Begin Phase 11: Matchmaking, friends and social play.**
 
-Phase 9 completes the planned core progression/combat feature set through
-events and persistent undead evolution. The R15 unit-art roster can be
-produced in parallel while Phase 10 replaces the recovery world with the
-authored Arena and useful player Base.
+Phase 10 is accepted GREEN. The recovery placeholder world has been
+replaced by the authored four-faction Arena and functional Base district,
+with no-jump traversal and streaming-aware Base presentation verified in
+Studio. The final R15 faction unit-art roster can continue in parallel.
 
-The first Phase 10 slice is:
-1. Establish the authored Arena layout and four faction regions.
-2. Create elevation, long sightlines, ambush routes and retreat routes.
-3. Reserve dangerous high-reward boss and event spaces.
-4. Build the Base layout around the existing Soul Foundry systems.
-5. Place Formation Editor, skill-loadout, Codex and unit-display areas.
-6. Add machine/building upgrade presentation and boss-trophy spaces.
-7. Playtest traversal, risk/reward routing and Base usability.
+The first Phase 11 slice is:
+1. Define the matchmaking strength inputs and server band model.
+2. Target eight-player Arena servers for normal matchmaking.
+3. Add Join Friend override behaviour without breaking progression bands.
+4. Add party state and strongest-member matchmaking.
+5. Add server-hopping protections.
+6. Add friend and party indicators for Arena readability.
+7. Playtest mixed-progression friend and party joins.
