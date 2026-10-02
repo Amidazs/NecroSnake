@@ -858,6 +858,51 @@ Work:
   place; a published-place cross-server smoke test remains a pre-launch
   check rather than an unfinished Phase 11 feature.
 
+## Pre-Phase 12 - Eight-player Sanctum plots
+
+**2 October 2026 Sanctum plot refactor:**
+- The Sanctum now has exactly eight player plots, matching the normal
+  eight-player Arena server target.
+- Players are assigned the first free plot automatically when they join.
+  Plot ownership is server-authoritative and released when the player
+  leaves, so the slot can be reused.
+- Returning from the Arena now sends a player directly to their assigned
+  plot rather than the communal Sanctum centre.
+- Every plot is a complete self-contained necromancer base with seven
+  physical facilities: Soul Foundry / Cloning Hall, Formation War Room,
+  Skill Reliquary, Necromancer Codex, Master Gallery, Boss Trophy Hall and
+  Foundry Upgrade Forge.
+- Every plot contains three clone chambers, six Master display slots, six
+  normal-unit display slots and four boss-trophy slots.
+- The old communal Phase10Facilities district has been removed.
+- Plot signs publicly show the assigned player's display name while the
+  server owns the authoritative assignment.
+- Only the owning player's seven station prompts are enabled locally.
+  Other players can visit and inspect a plot, but cannot operate its
+  gameplay stations.
+- Soul Vault data still drives the physical clone, unit, Master and trophy
+  presentation. Existing Formation and Soul Foundry interactions were
+  verified from inside an assigned plot.
+- Plot arrival pads are controlled teleport markers rather than Roblox
+  SpawnLocations, preventing normal respawns from placing players inside
+  another player's plot.
+- The Sanctum safe-zone volume now covers the complete eight-plot ring,
+  including each plot's outer edge.
+- Physical upgrade metadata now exists for Plot, Soul Foundry, Formation,
+  Skill Reliquary, Codex, Master Gallery, Trophy Hall and Upgrade Forge.
+  These begin at level 1 and provide the structural hook for the next
+  upgrade-progression pass; costs and gameplay effects are not yet
+  implemented.
+- Acceptance filled plots 2-8 after the live player occupied Plot 1,
+  rejected a ninth claim, released Plot 5 and successfully reused Plot 5.
+- Final runtime acceptance returned the player to Plot 1, verified all
+  seven owned prompts enabled and all streamed foreign prompts disabled,
+  and confirmed the rear edge of the plot still remained in SafeZone.
+- An independent copy of the saved canonical place was reopened in a
+  second Studio session. It retained all eight plots, 56 stations and 56
+  prompts, then passed the same assignment, retreat and prompt-ownership
+  runtime checks without runtime errors.
+
 ## Phase 12 - Polish, onboarding, analytics and launch preparation
 
 Work:
@@ -890,19 +935,22 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 12: Polish, onboarding, analytics and launch preparation.**
+**Complete Sanctum plot progression before beginning Phase 12 polish.**
 
-Phase 11 is accepted GREEN in the canonical Studio place. Matchmaking,
-parties, Join Friend override, strongest-member anti-boosting, hop
-protection and friend/party battle readability are implemented. The final
-R15 faction unit-art roster can continue in parallel.
+The eight-player plot architecture is accepted GREEN. The physical Base
+systems have moved out of the communal Sanctum UI/district and into the
+player's assigned plot. The next pre-Phase-12 slice is to make those
+physical facilities genuinely upgradeable and use them to remove
+redundant menu UI.
 
-The first Phase 12 slice is:
-1. Consolidate the final HUD, including social/matchmaking presentation.
-2. Complete mobile and controller support.
-3. Build the short first-session tutorial and onboarding flow.
-4. Polish audio, music, resurrection/death/boss VFX and accessibility.
-5. Add performance settings and the agreed analytics funnel.
-6. Run soft-launch balance and retention instrumentation checks.
-7. In a published test place, smoke-test the Phase 11 reserved-server and
-   Join Friend cross-server network branches before launch.
+The next slice is:
+1. Define what each Plot and facility level unlocks or improves.
+2. Define upgrade currencies, costs, prerequisites and sensible caps.
+3. Persist every facility's upgrade level per player.
+4. Make upgrades visibly alter the player's physical plot/buildings.
+5. Move upgrade actions to the Foundry Upgrade Forge.
+6. Remove or simplify UI that is now represented physically in the plot.
+7. Playtest upgrade persistence, ownership and multiplayer plot visits.
+
+After that, continue Phase 12 with HUD consolidation, mobile/controller
+support, onboarding, polish, analytics and launch preparation.

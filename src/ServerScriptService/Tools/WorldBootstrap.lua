@@ -3,7 +3,7 @@
 -- Ensures:
 -- - Arena spawn region covering 0..2000 x 0..2000
 -- - Safe zone far away with a town centre
--- - 6 base plots arranged in a circle around the town centre
+-- - 8 player plots arranged in a circle around the town centre
 -- - Medieval-looking bases with walls, corner turrets, gate arch, a small
 --   house shell, fire pit, banners, torches, and a path to town
 --
@@ -16,7 +16,7 @@ local Workspace = game:GetService("Workspace")
 
 local WorldBootstrap = {}
 
-local VERSION = "WorldBootstrap v1.4 (better medieval bases + town-facing gates)"
+local VERSION = "WorldBootstrap v1.5 (eight player Sanctum plots)"
 local DEBUG = true
 
 local ZONES_FOLDER_NAME = "Zones"
@@ -28,7 +28,7 @@ local SAFE_ZONE_REGION_NAME = "SafeZoneRegion"
 
 local BASES_FOLDER_NAME = "Bases"
 local DECOR_FOLDER_NAME = "Decor"
-local BASE_COUNT = 6
+local BASE_COUNT = 8
 
 -- Arena bounds: from (0,0,0) to (2000,0,2000).
 local ARENA_CENTER = Vector3.new(1000, 60, 1000)
@@ -36,7 +36,7 @@ local ARENA_REGION_SIZE = Vector3.new(2000, 200, 2000)
 
 -- Put the safe zone far away.
 local SAFE_ZONE_CENTER = Vector3.new(3600, 40, 3600)
-local SAFE_ZONE_REGION_SIZE = Vector3.new(1200, 240, 1200)
+local SAFE_ZONE_REGION_SIZE = Vector3.new(1400, 240, 1400)
 
 -- Ground
 local SAFE_GROUND_SIZE = Vector3.new(1400, 18, 1400)
@@ -193,33 +193,47 @@ local function ensure_wedge_part(
 	return wedge
 end
 
-local function ensure_spawn_location(
+--[[
+	Creates a non-Roblox-spawn marker for a player plot.
+
+	The marker is used only as a controlled teleport destination. Using a
+	real SpawnLocation here would allow Roblox to respawn a player inside
+	another player's assigned plot.
+
+	Args:
+		parent (Instance): Plot model receiving the marker.
+		name (string): Marker name.
+		size (Vector3): Marker size.
+		cframe (CFrame): Marker transform.
+
+	Returns:
+		Part: Plot arrival marker.
+]]
+local function ensure_spawn_marker(
 	parent: Instance,
 	name: string,
 	size: Vector3,
 	cframe: CFrame
-): SpawnLocation
+): Part
 	local inst = parent:FindFirstChild(name)
-	local spawn: SpawnLocation
+	local spawn: Part
 
-	if inst and inst:IsA("SpawnLocation") then
-		spawn = inst
+	if inst and inst.ClassName == "Part" then
+		spawn = inst :: Part
 	else
 		if inst then
 			inst:Destroy()
 		end
 
-		spawn = Instance.new("SpawnLocation")
+		spawn = Instance.new("Part")
 		spawn.Name = name
 		spawn.Parent = parent
 	end
 
 	spawn.Anchored = true
-	spawn.Neutral = true
 	spawn.CanCollide = true
 	spawn.Size = size
 	spawn.CFrame = cframe
-
 	return spawn
 end
 
@@ -386,11 +400,21 @@ local function ensure_plot_walls_and_gate(
 	local post_right_cf = plot_cf
 		* CFrame.new(gate_half, SAFE_GROUND_Y + (post_height * 0.5), -half_z + 4)
 
-	local gate_left = ensure_part(parent, "GatePost_Left", post_size, post_left_cf)
+	local gate_left = ensure_part(
+		parent,
+		"GatePost_Left",
+		post_size,
+		post_left_cf
+	)
 	gate_left.CanCollide = true
 	set_wood(gate_left)
 
-	local gate_right = ensure_part(parent, "GatePost_Right", post_size, post_right_cf)
+	local gate_right = ensure_part(
+		parent,
+		"GatePost_Right",
+		post_size,
+		post_right_cf
+	)
 	gate_right.CanCollide = true
 	set_wood(gate_right)
 
@@ -477,7 +501,11 @@ local function ensure_small_house(parent: Instance, plot_cf: CFrame)
 
 	local function wall(name: string, size: Vector3, local_pos: Vector3)
 		local world_pos = (plot_cf * CFrame.new(local_pos)).Position
-		local cf = CFrame.new(world_pos.X, wall_y, world_pos.Z) * CFrame.Angles(0, yaw, 0)
+		local cf = CFrame.new(
+			world_pos.X,
+			wall_y,
+			world_pos.Z
+		) * CFrame.Angles(0, yaw, 0)
 		local w = ensure_part(parent, name, size, cf)
 		w.CanCollide = true
 		set_wood(w)
@@ -603,13 +631,27 @@ local function create_safe_zone(zones_folder: Folder)
 		SAFE_GROUND_Y - (SAFE_GROUND_SIZE.Y * 0.5),
 		SAFE_ZONE_CENTER.Z
 	)
-	local ground = ensure_part(safe_model, "SafeZoneGround", SAFE_GROUND_SIZE, ground_cf)
+	local ground = ensure_part(
+		safe_model,
+		"SafeZoneGround",
+		SAFE_GROUND_SIZE,
+		ground_cf
+	)
 	ground.CanCollide = true
 	set_ground(ground)
 
 	-- Town centre square
-	local square_cf = CFrame.new(SAFE_ZONE_CENTER.X, SAFE_GROUND_Y + 3, SAFE_ZONE_CENTER.Z)
-	local square = ensure_part(safe_model, "TownSquare", TOWN_SQUARE_SIZE, square_cf)
+	local square_cf = CFrame.new(
+		SAFE_ZONE_CENTER.X,
+		SAFE_GROUND_Y + 3,
+		SAFE_ZONE_CENTER.Z
+	)
+	local square = ensure_part(
+		safe_model,
+		"TownSquare",
+		TOWN_SQUARE_SIZE,
+		square_cf
+	)
 	square.CanCollide = true
 	set_ground(square)
 
@@ -617,22 +659,38 @@ local function create_safe_zone(zones_folder: Folder)
 	ensure_torch(
 		safe_model,
 		"SquareTorch_NW",
-		CFrame.new(SAFE_ZONE_CENTER.X - 150, SAFE_GROUND_Y + 1, SAFE_ZONE_CENTER.Z - 150)
+		CFrame.new(
+			SAFE_ZONE_CENTER.X - 150,
+			SAFE_GROUND_Y + 1,
+			SAFE_ZONE_CENTER.Z - 150
+		)
 	)
 	ensure_torch(
 		safe_model,
 		"SquareTorch_NE",
-		CFrame.new(SAFE_ZONE_CENTER.X + 150, SAFE_GROUND_Y + 1, SAFE_ZONE_CENTER.Z - 150)
+		CFrame.new(
+			SAFE_ZONE_CENTER.X + 150,
+			SAFE_GROUND_Y + 1,
+			SAFE_ZONE_CENTER.Z - 150
+		)
 	)
 	ensure_torch(
 		safe_model,
 		"SquareTorch_SW",
-		CFrame.new(SAFE_ZONE_CENTER.X - 150, SAFE_GROUND_Y + 1, SAFE_ZONE_CENTER.Z + 150)
+		CFrame.new(
+			SAFE_ZONE_CENTER.X - 150,
+			SAFE_GROUND_Y + 1,
+			SAFE_ZONE_CENTER.Z + 150
+		)
 	)
 	ensure_torch(
 		safe_model,
 		"SquareTorch_SE",
-		CFrame.new(SAFE_ZONE_CENTER.X + 150, SAFE_GROUND_Y + 1, SAFE_ZONE_CENTER.Z + 150)
+		CFrame.new(
+			SAFE_ZONE_CENTER.X + 150,
+			SAFE_GROUND_Y + 1,
+			SAFE_ZONE_CENTER.Z + 150
+		)
 	)
 
 	ensure_banner(
@@ -647,6 +705,10 @@ local function create_safe_zone(zones_folder: Folder)
 	for i = 1, BASE_COUNT do
 		local base_name = ("Base%02d"):format(i)
 		local base_model = get_or_create_model(bases_folder, base_name)
+		base_model:SetAttribute("PlotIndex", i)
+		base_model:SetAttribute("PlotOwnerUserId", 0)
+		base_model:SetAttribute("PlotOwnerName", "")
+		base_model:SetAttribute("PlotOccupied", false)
 
 		local angle = (math.pi * 2) * ((i - 1) / BASE_COUNT)
 		local x = SAFE_ZONE_CENTER.X + (math.cos(angle) * BASE_RING_RADIUS)
@@ -656,7 +718,11 @@ local function create_safe_zone(zones_folder: Folder)
 		-- In Roblox, the CFrame's LookVector points along -Z, so this makes the
 		-- "front" (gate side) face toward the town.
 		local plot_pos = Vector3.new(x, SAFE_GROUND_Y + (BASE_PLOT_SIZE.Y * 0.5), z)
-		local look_pos = Vector3.new(SAFE_ZONE_CENTER.X, plot_pos.Y, SAFE_ZONE_CENTER.Z)
+		local look_pos = Vector3.new(
+			SAFE_ZONE_CENTER.X,
+			plot_pos.Y,
+			SAFE_ZONE_CENTER.Z
+		)
 		local plot_cf = CFrame.lookAt(plot_pos, look_pos)
 
 		local plot = ensure_part(base_model, "Plot", BASE_PLOT_SIZE, plot_cf)
@@ -669,7 +735,14 @@ local function create_safe_zone(zones_folder: Folder)
 		local spawn_y =
 			(BASE_PLOT_SIZE.Y * 0.5) + (SPAWN_PAD_SIZE.Y * 0.5) + 0.1
 		local spawn_cf = plot_cf * CFrame.new(0, spawn_y, -80)
-		local spawn = ensure_spawn_location(base_model, "Spawn", SPAWN_PAD_SIZE, spawn_cf)
+		local spawn = ensure_spawn_marker(
+			base_model,
+			"Spawn",
+			SPAWN_PAD_SIZE,
+			spawn_cf
+		)
+		spawn:SetAttribute("SanctumPlotSpawn", true)
+		spawn:SetAttribute("PlotIndex", i)
 		spawn.Material = Enum.Material.SmoothPlastic
 		spawn.Color = Color3.fromRGB(45, 160, 90)
 
@@ -708,7 +781,11 @@ local function create_safe_zone(zones_folder: Folder)
 		ensure_fire_pit(decor, plot_cf)
 
 		if DEBUG then
-			debug_print(("[WorldBootstrap] Updated %s"):format(base_model:GetFullName()))
+			debug_print(
+				("[WorldBootstrap] Updated %s"):format(
+					base_model:GetFullName()
+				)
+			)
 		end
 	end
 end
@@ -732,7 +809,11 @@ function WorldBootstrap.run()
 
 	local zones = Workspace:FindFirstChild(ZONES_FOLDER_NAME)
 	if zones then
-		debug_print(("[WorldBootstrap] Zones folder: %s"):format(zones:GetFullName()))
+		debug_print(
+			("[WorldBootstrap] Zones folder: %s"):format(
+				zones:GetFullName()
+			)
+		)
 	end
 
 	ensure_world_objects()

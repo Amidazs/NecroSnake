@@ -24,6 +24,7 @@ local army_service = nil :: any
 local backpack_service = nil :: any
 local pvp_service = nil :: any
 local matchmaking_service = nil :: any
+local plot_service = nil :: any
 
 local function log(message: string)
 	print("[TeleportService] " .. message)
@@ -95,7 +96,15 @@ local function teleport_player_to(
 	local cf: CFrame? = nil
 
 	if destination == "SafeZone" then
-		cf = get_region_center_cframe(SAFE_ZONE_MODEL_NAME, SAFE_ZONE_REGION_NAME)
+		if plot_service and plot_service.get_spawn_cframe then
+			cf = plot_service.get_spawn_cframe(player)
+		end
+		if not cf then
+			cf = get_region_center_cframe(
+				SAFE_ZONE_MODEL_NAME,
+				SAFE_ZONE_REGION_NAME
+			)
+		end
 	elseif destination == "Arena" then
 		cf = get_region_center_cframe(ARENA_MODEL_NAME, ARENA_SPAWN_REGION_NAME)
 	else
@@ -406,12 +415,14 @@ function TeleportService.init(
 	army_service_ref: any,
 	backpack_service_ref: any,
 	pvp_service_ref: any?,
-	matchmaking_service_ref: any?
+	matchmaking_service_ref: any?,
+	plot_service_ref: any?
 )
 	army_service = army_service_ref
 	backpack_service = backpack_service_ref
 	pvp_service = pvp_service_ref
 	matchmaking_service = matchmaking_service_ref
+	plot_service = plot_service_ref
 end
 
 function TeleportService.start()

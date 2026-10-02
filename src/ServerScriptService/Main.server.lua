@@ -82,6 +82,10 @@ local MatchmakingService = require(
 	ServicesFolder:WaitForChild("MatchmakingService")
 )
 
+local PlotService = require(
+	ServicesFolder:WaitForChild("PlotService")
+)
+
 local TeleportService = require(
 	ServicesFolder:WaitForChild("TeleportService")
 )
@@ -196,6 +200,8 @@ local function main()
 	)
 	MatchmakingService.start()
 
+	PlotService.start()
+
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
@@ -233,7 +239,8 @@ local function main()
 		ArmyService,
 		BackpackService,
 		PvPService,
-		MatchmakingService
+		MatchmakingService,
+		PlotService
 	)
 	TeleportService.start()
 	PlayerMovementService.start()

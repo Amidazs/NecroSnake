@@ -8,6 +8,8 @@ local ARENA_CENTER = Vector3.new(1000, 0, 1000)
 local SAFE_CENTER = Vector3.new(3600, 0, 3600)
 local AUTHORED_NAME = "Phase10Authored"
 local FACILITIES_NAME = "Phase10Facilities"
+local PLOTS_FOLDER_NAME = "Bases"
+local PLOT_COUNT = 8
 
 local COLORS = {
 	neutral = Color3.fromRGB(92, 86, 78),
@@ -945,6 +947,8 @@ end
 		part (BasePart): Prompt parent.
 		station_id (string): Station identifier.
 		action_text (string): Prompt action text.
+		plot_index (number): Owning Sanctum plot index.
+		upgrade_key (string): Future physical-upgrade identifier.
 
 	Returns:
 		ProximityPrompt: Created prompt.
@@ -952,9 +956,14 @@ end
 local function add_station_prompt(
 	part: BasePart,
 	station_id: string,
-	action_text: string
+	action_text: string,
+	plot_index: number,
+	upgrade_key: string
 ): ProximityPrompt
 	part:SetAttribute("BaseStationId", station_id)
+	part:SetAttribute("PlotIndex", plot_index)
+	part:SetAttribute("PlotUpgradeKey", upgrade_key)
+
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "BaseStationPrompt"
 	prompt.ActionText = action_text
@@ -967,14 +976,17 @@ local function add_station_prompt(
 end
 
 --[[
-	Creates a labelled Base station pad and interaction pedestal.
+	Creates a compact station inside one player plot.
 
 	Args:
-		parent (Instance): Facilities container.
-		name (string): Station name.
-		position (Vector3): Station centre.
+		parent (Instance): Plot facilities container.
+		name (string): Station display name.
+		station_cf (CFrame): Station world transform.
 		color (Color3): Station accent.
 		station_id (string): Client interaction identifier.
+		plot_index (number): Owning plot index.
+		diameter (number): Station floor diameter.
+		upgrade_key (string): Future upgrade identifier.
 
 	Returns:
 		Model: Created station model.
@@ -982,19 +994,26 @@ end
 local function make_station(
 	parent: Instance,
 	name: string,
-	position: Vector3,
+	station_cf: CFrame,
 	color: Color3,
-	station_id: string
+	station_id: string,
+	plot_index: number,
+	diameter: number,
+	upgrade_key: string
 ): Model
 	local model = Instance.new("Model")
 	model.Name = name
+	model:SetAttribute("BaseStationId", station_id)
+	model:SetAttribute("PlotIndex", plot_index)
+	model:SetAttribute("PlotUpgradeKey", upgrade_key)
 	model.Parent = parent
 
+	local position = station_cf.Position
 	make_disc(
 		model,
 		"Floor",
 		position,
-		92,
+		diameter,
 		color:Lerp(Color3.fromRGB(32, 30, 34), 0.6),
 		Enum.Material.Slate
 	)
@@ -1003,27 +1022,34 @@ local function make_station(
 		Color3.fromRGB(28, 27, 31),
 		0.58
 	)
+	local x_offset = diameter * 0.31
+	local z_offset = diameter * 0.23
 	for _, offset in ipairs({
-		Vector3.new(-32, 14, -24),
-		Vector3.new(32, 14, -24),
-		Vector3.new(-32, 14, 24),
-		Vector3.new(32, 14, 24),
+		Vector3.new(-x_offset, 11, -z_offset),
+		Vector3.new(x_offset, 11, -z_offset),
+		Vector3.new(-x_offset, 11, z_offset),
+		Vector3.new(x_offset, 11, z_offset),
 	}) do
 		make_part(
 			model,
 			"StationColumn",
-			Vector3.new(6, 28, 6),
-			CFrame.new(position + offset),
+			Vector3.new(4, 22, 4),
+			station_cf * CFrame.new(offset),
 			frame_color,
 			Enum.Material.Slate,
 			true
 		)
 	end
+
 	make_part(
 		model,
 		"StationCanopy",
-		Vector3.new(76, 3, 54),
-		CFrame.new(position + Vector3.new(0, 29, 0)),
+		Vector3.new(
+			diameter * 0.78,
+			2,
+			diameter * 0.58
+		),
+		station_cf * CFrame.new(0, 23, 0),
 		frame_color,
 		Enum.Material.Slate,
 		true
@@ -1032,49 +1058,110 @@ local function make_station(
 	local pedestal = make_part(
 		model,
 		"InteractionPedestal",
-		Vector3.new(8, 8, 8),
-		CFrame.new(position + Vector3.new(0, 5, 0)),
+		Vector3.new(7, 7, 7),
+		station_cf * CFrame.new(0, 4, 0),
 		color,
 		Enum.Material.Neon,
 		true
 	)
-	add_station_prompt(pedestal, station_id, "Use")
+	add_station_prompt(
+		pedestal,
+		station_id,
+		"Use",
+		plot_index,
+		upgrade_key
+	)
+
 	make_world_label(
 		model,
 		"StationLabel",
-		position + Vector3.new(0, 35, 0),
+		position + Vector3.new(0, 29, 0),
 		name,
 		color
 	)
 	return model
 end
+
 --[[
-	Creates decorative clone chambers in the Soul Foundry.
+	Creates an owner sign at the front of a Sanctum plot.
+
+	Args:
+		parent (Instance): Plot model.
+		plot_cf (CFrame): Plot surface transform.
+		plot_index (number): Plot index.
+
+	Returns:
+		BasePart: Owner-sign anchor.
+]]
+local function make_plot_owner_sign(
+	parent: Instance,
+	plot_cf: CFrame,
+	plot_index: number
+): BasePart
+	local anchor = make_part(
+		parent,
+		"PlotOwnerSign",
+		Vector3.new(1, 1, 1),
+		plot_cf * CFrame.new(0, 24, -112),
+		COLORS.gold,
+		Enum.Material.SmoothPlastic,
+		false,
+		1
+	)
+	anchor:SetAttribute("PlotIndex", plot_index)
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "OwnerBillboard"
+	gui.AlwaysOnTop = true
+	gui.Size = UDim2.fromOffset(290, 64)
+	gui.Parent = anchor
+
+	local label = Instance.new("TextLabel")
+	label.Name = "OwnerText"
+	label.BackgroundColor3 = Color3.fromRGB(17, 15, 20)
+	label.BackgroundTransparency = 0.12
+	label.BorderSizePixel = 0
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.Text = ("PLOT %02d\nUNCLAIMED"):format(plot_index)
+	label.TextColor3 = COLORS.gold
+	label.TextScaled = true
+	label.TextWrapped = true
+	label.Parent = gui
+	return anchor
+end
+
+--[[
+	Creates decorative clone chambers in a plot Soul Foundry.
 
 	Args:
 		parent (Instance): Soul Foundry station.
-		center (Vector3): Foundry centre.
+		station_cf (CFrame): Foundry transform.
+		plot_index (number): Owning plot index.
 
 	Returns:
 		None.
 ]]
 local function add_clone_chambers(
 	parent: Instance,
-	center: Vector3
+	station_cf: CFrame,
+	plot_index: number
 )
 	for index = 1, 3 do
-		local x = (index - 2) * 22
+		local x = (index - 2) * 19
 		local chamber = make_part(
 			parent,
 			("CloneChamber%d"):format(index),
-			Vector3.new(10, 24, 10),
-			CFrame.new(center + Vector3.new(x, 13, 18)),
+			Vector3.new(9, 20, 9),
+			station_cf * CFrame.new(x, 11, 16),
 			COLORS.soul,
 			Enum.Material.Glass,
 			true,
 			0.38
 		)
 		chamber:SetAttribute("MachineIndex", index)
+		chamber:SetAttribute("PlotIndex", plot_index)
+
 		local light = Instance.new("PointLight")
 		light.Color = COLORS.soul
 		light.Brightness = 1.5
@@ -1082,112 +1169,282 @@ local function add_clone_chambers(
 		light.Parent = chamber
 	end
 end
+
 --[[
-	Creates Master display plinths for visual army trophies.
+	Creates Master display plinths inside one plot gallery.
 
 	Args:
 		parent (Instance): Gallery station.
-		center (Vector3): Gallery centre.
+		station_cf (CFrame): Gallery transform.
+		plot_index (number): Owning plot index.
 
 	Returns:
 		None.
 ]]
 local function add_master_plinths(
 	parent: Instance,
-	center: Vector3
+	station_cf: CFrame,
+	plot_index: number
 )
 	for index = 1, 6 do
 		local angle = (math.pi * 2 / 6) * index
 		local offset = Vector3.new(
-			math.cos(angle) * 28,
+			math.cos(angle) * 18,
 			2,
-			math.sin(angle) * 28
+			math.sin(angle) * 18
 		)
 		local plinth = make_part(
 			parent,
 			("MasterPlinth%d"):format(index),
-			Vector3.new(10, 4, 10),
-			CFrame.new(center + offset),
+			Vector3.new(8, 4, 8),
+			station_cf * CFrame.new(offset),
 			Color3.fromRGB(88, 74, 96),
 			Enum.Material.Marble,
 			true
 		)
 		plinth:SetAttribute("MasterDisplaySlot", index)
+		plinth:SetAttribute("PlotIndex", plot_index)
 	end
 end
 
 --[[
-	Creates deployable-unit display plinths around the Master Gallery.
+	Creates deployable-unit plinths inside one plot gallery.
 
 	Args:
 		parent (Instance): Gallery station.
-		center (Vector3): Gallery centre.
+		station_cf (CFrame): Gallery transform.
+		plot_index (number): Owning plot index.
 
 	Returns:
 		None.
 ]]
 local function add_unit_plinths(
 	parent: Instance,
-	center: Vector3
+	station_cf: CFrame,
+	plot_index: number
 )
 	for index = 1, 6 do
 		local angle = (math.pi * 2 / 6) * index + 0.52
 		local offset = Vector3.new(
-			math.cos(angle) * 40,
+			math.cos(angle) * 26,
 			1.5,
-			math.sin(angle) * 40
+			math.sin(angle) * 26
 		)
 		local plinth = make_part(
 			parent,
 			("UnitPlinth%d"):format(index),
-			Vector3.new(8, 3, 8),
-			CFrame.new(center + offset),
+			Vector3.new(6, 3, 6),
+			station_cf * CFrame.new(offset),
 			Color3.fromRGB(66, 71, 79),
 			Enum.Material.Slate,
 			true
 		)
 		plinth:SetAttribute("UnitDisplaySlot", index)
+		plinth:SetAttribute("PlotIndex", plot_index)
 	end
 end
 
 --[[
-	Creates boss trophy plinths for captured-major-boss presentation.
+	Creates boss trophy plinths inside one player plot.
 
 	Args:
 		parent (Instance): Trophy Hall station.
-		center (Vector3): Trophy Hall centre.
+		station_cf (CFrame): Trophy Hall transform.
+		plot_index (number): Owning plot index.
 
 	Returns:
 		None.
 ]]
 local function add_trophy_plinths(
 	parent: Instance,
-	center: Vector3
+	station_cf: CFrame,
+	plot_index: number
 )
 	for index = 1, 4 do
-		local x = if index % 2 == 0 then 23 else -23
-		local z = if index <= 2 then -18 else 18
+		local x = if index % 2 == 0 then 15 else -15
+		local z = if index <= 2 then -12 else 12
 		local plinth = make_part(
 			parent,
 			("BossTrophyPlinth%d"):format(index),
-			Vector3.new(14, 6, 14),
-			CFrame.new(center + Vector3.new(x, 4, z)),
+			Vector3.new(10, 5, 10),
+			station_cf * CFrame.new(x, 3.5, z),
 			Color3.fromRGB(111, 87, 54),
 			Enum.Material.Marble,
 			true
 		)
 		plinth:SetAttribute("BossTrophySlot", index)
+		plinth:SetAttribute("PlotIndex", plot_index)
 	end
 end
 
 --[[
-	Builds useful communal Base facilities around the town square.
+	Sets default physical upgrade metadata on one plot.
+
+	Args:
+		plot (Model): Plot receiving defaults.
+
+	Returns:
+		None.
+]]
+local function set_plot_upgrade_defaults(plot: Model)
+	local defaults = {
+		PlotLevel = 1,
+		SoulFoundryLevel = 1,
+		FormationLevel = 1,
+		SkillReliquaryLevel = 1,
+		CodexLevel = 1,
+		MasterGalleryLevel = 1,
+		TrophyHallLevel = 1,
+		UpgradeForgeLevel = 1,
+	}
+	for name, value in pairs(defaults) do
+		if plot:GetAttribute(name) == nil then
+			plot:SetAttribute(name, value)
+		end
+	end
+end
+
+--[[
+	Builds all functional facilities inside one Sanctum plot.
+
+	Args:
+		plot (Model): Player plot model.
+		plot_index (number): Plot index.
+
+	Returns:
+		boolean: True when the plot facilities were built.
+]]
+local function build_plot_facilities(
+	plot: Model,
+	plot_index: number
+): boolean
+	local floor = plot:FindFirstChild("Plot")
+	if not (floor and floor:IsA("BasePart")) then
+		return false
+	end
+
+	plot:SetAttribute("PlotIndex", plot_index)
+	plot:SetAttribute("PlotOwnerUserId", 0)
+	plot:SetAttribute("PlotOwnerName", "")
+	plot:SetAttribute("PlotOccupied", false)
+	set_plot_upgrade_defaults(plot)
+
+	destroy_named_child(plot, FACILITIES_NAME)
+	destroy_named_child(plot, "PlotOwnerSign")
+
+	local facilities = Instance.new("Folder")
+	facilities.Name = FACILITIES_NAME
+	facilities:SetAttribute("PlotIndex", plot_index)
+	facilities.Parent = plot
+
+	local surface_cf = floor.CFrame * CFrame.new(
+		0,
+		floor.Size.Y * 0.5 + 1,
+		0
+	)
+	make_plot_owner_sign(plot, surface_cf, plot_index)
+
+	local soul_cf = surface_cf * CFrame.new(0, 0, 55)
+	local formation_cf = surface_cf * CFrame.new(-65, 0, -43)
+	local skills_cf = surface_cf * CFrame.new(65, 0, -43)
+	local codex_cf = surface_cf * CFrame.new(-84, 0, 12)
+	local forge_cf = surface_cf * CFrame.new(84, 0, 12)
+	local master_cf = surface_cf * CFrame.new(-82, 0, 77)
+	local trophy_cf = surface_cf * CFrame.new(82, 0, 77)
+
+	local soul = make_station(
+		facilities,
+		"Soul Foundry & Cloning Hall",
+		soul_cf,
+		COLORS.soul,
+		"SoulFoundry",
+		plot_index,
+		46,
+		"SoulFoundryLevel"
+	)
+	add_clone_chambers(soul, soul_cf, plot_index)
+
+	make_station(
+		facilities,
+		"Formation War Room",
+		formation_cf,
+		Color3.fromRGB(94, 160, 128),
+		"FormationEditor",
+		plot_index,
+		44,
+		"FormationLevel"
+	)
+	make_station(
+		facilities,
+		"Skill Reliquary",
+		skills_cf,
+		Color3.fromRGB(168, 106, 75),
+		"SkillLoadout",
+		plot_index,
+		44,
+		"SkillReliquaryLevel"
+	)
+	make_station(
+		facilities,
+		"Necromancer Codex",
+		codex_cf,
+		Color3.fromRGB(99, 139, 175),
+		"Codex",
+		plot_index,
+		40,
+		"CodexLevel"
+	)
+
+	local gallery = make_station(
+		facilities,
+		"Master Gallery",
+		master_cf,
+		Color3.fromRGB(150, 112, 174),
+		"Masters",
+		plot_index,
+		58,
+		"MasterGalleryLevel"
+	)
+	add_master_plinths(gallery, master_cf, plot_index)
+	add_unit_plinths(gallery, master_cf, plot_index)
+
+	local trophy_hall = make_station(
+		facilities,
+		"Boss Trophy Hall",
+		trophy_cf,
+		COLORS.gold,
+		"Trophies",
+		plot_index,
+		52,
+		"TrophyHallLevel"
+	)
+	add_trophy_plinths(
+		trophy_hall,
+		trophy_cf,
+		plot_index
+	)
+
+	make_station(
+		facilities,
+		"Foundry Upgrade Forge",
+		forge_cf,
+		Color3.fromRGB(205, 112, 56),
+		"Upgrades",
+		plot_index,
+		40,
+		"UpgradeForgeLevel"
+	)
+	return true
+end
+
+--[[
+	Builds eight self-contained player plots in the Sanctum.
 
 	Args:
 		None.
 
 	Returns:
-		boolean: True when facilities were rebuilt.
+		boolean: True when all eight plots were rebuilt.
 ]]
 local function build_base(): boolean
 	local zones = Workspace:FindFirstChild("Zones")
@@ -1197,75 +1454,23 @@ local function build_base(): boolean
 	end
 
 	destroy_named_child(safe, FACILITIES_NAME)
-	local facilities = Instance.new("Folder")
-	facilities.Name = FACILITIES_NAME
-	facilities.Parent = safe
-	local soul_pos = SAFE_CENTER + Vector3.new(0, 5, -220)
-	local formation_pos = SAFE_CENTER + Vector3.new(-220, 5, 0)
-	local skills_pos = SAFE_CENTER + Vector3.new(220, 5, 0)
-	local codex_pos = SAFE_CENTER + Vector3.new(0, 5, 220)
-	local master_pos = SAFE_CENTER + Vector3.new(175, 5, -175)
-	local trophy_pos = SAFE_CENTER + Vector3.new(175, 5, 175)
-	local forge_pos = SAFE_CENTER + Vector3.new(-175, 5, 175)
 
-	local soul = make_station(
-		facilities,
-		"Soul Foundry & Cloning Hall",
-		soul_pos,
-		COLORS.soul,
-		"SoulFoundry"
-	)
-	add_clone_chambers(soul, soul_pos)
+	local plots = safe:FindFirstChild(PLOTS_FOLDER_NAME)
+	if not (plots and plots:IsA("Folder")) then
+		return false
+	end
 
-	make_station(
-		facilities,
-		"Formation War Room",
-		formation_pos,
-		Color3.fromRGB(94, 160, 128),
-		"FormationEditor"
-	)
-	make_station(
-		facilities,
-		"Skill Reliquary",
-		skills_pos,
-		Color3.fromRGB(168, 106, 75),
-		"SkillLoadout"
-	)
-	make_station(
-		facilities,
-		"Necromancer Codex",
-		codex_pos,
-		Color3.fromRGB(99, 139, 175),
-		"Codex"
-	)
-
-	local gallery = make_station(
-		facilities,
-		"Master Gallery",
-		master_pos,
-		Color3.fromRGB(150, 112, 174),
-		"Masters"
-	)
-	add_master_plinths(gallery, master_pos)
-	add_unit_plinths(gallery, master_pos)
-
-	local trophy_hall = make_station(
-		facilities,
-		"Boss Trophy Hall",
-		trophy_pos,
-		COLORS.gold,
-		"Trophies"
-	)
-	add_trophy_plinths(trophy_hall, trophy_pos)
-
-	make_station(
-		facilities,
-		"Foundry Upgrade Forge",
-		forge_pos,
-		Color3.fromRGB(205, 112, 56),
-		"Upgrades"
-	)
-	return true
+	local built = 0
+	for plot_index = 1, PLOT_COUNT do
+		local plot_name = ("Base%02d"):format(plot_index)
+		local plot = plots:FindFirstChild(plot_name)
+		if plot and plot:IsA("Model") then
+			if build_plot_facilities(plot, plot_index) then
+				built += 1
+			end
+		end
+	end
+	return built == PLOT_COUNT
 end
 
 --[[

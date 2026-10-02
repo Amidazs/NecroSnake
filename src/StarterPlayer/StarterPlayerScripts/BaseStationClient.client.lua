@@ -54,23 +54,139 @@ local INFO_TEXT: { [string]: { title: string, body: string } } = {
 	},
 }
 --[[
-	Finds the authored Phase 10 Base facilities.
+	Returns the local player's assigned Sanctum plot index.
 
 	Args:
 		None.
 
 	Returns:
-		Folder?: Facilities folder when it is currently replicated.
+		number?: Positive plot index when assigned.
 ]]
-local function get_facilities(): Folder?
+local function get_owned_plot_index(): number?
+	local value = player:GetAttribute("SanctumPlotIndex")
+	if typeof(value) ~= "number" or value <= 0 then
+		return nil
+	end
+	return math.floor(value)
+end
+
+--[[
+	Finds the local player's assigned Sanctum plot.
+
+	Args:
+		None.
+
+	Returns:
+		Model?: Owned plot when it is currently streamed.
+]]
+local function get_owned_plot(): Model?
+	local plot_index = get_owned_plot_index()
+	if not plot_index then
+		return nil
+	end
+
 	local zones = workspace:FindFirstChild("Zones")
 	local safe = zones and zones:FindFirstChild("SafeZoneWorld")
-	local facilities = safe
-		and safe:FindFirstChild("Phase10Facilities")
+	local plots = safe and safe:FindFirstChild("Bases")
+	if not (plots and plots:IsA("Folder")) then
+		return nil
+	end
+
+	local named = plots:FindFirstChild(
+		("Base%02d"):format(plot_index)
+	)
+	if named and named:IsA("Model") then
+		return named
+	end
+
+	for _, child in ipairs(plots:GetChildren()) do
+		if child:IsA("Model")
+			and child:GetAttribute("PlotIndex") == plot_index
+		then
+			return child
+		end
+	end
+	return nil
+end
+
+--[[
+	Finds the functional facilities inside the owned plot.
+
+	Args:
+		None.
+
+	Returns:
+		Folder?: Facilities folder when currently streamed.
+]]
+local function get_facilities(): Folder?
+	local plot = get_owned_plot()
+	local facilities = plot
+		and plot:FindFirstChild("Phase10Facilities")
 	if facilities and facilities:IsA("Folder") then
 		return facilities
 	end
 	return nil
+end
+
+--[[
+	Returns whether a prompt belongs to the local player's plot.
+
+	Args:
+		prompt (ProximityPrompt): Prompt to inspect.
+
+	Returns:
+		boolean: True when the prompt belongs to the owned plot.
+]]
+local function owns_prompt(prompt: ProximityPrompt): boolean
+	local plot_index = get_owned_plot_index()
+	if not plot_index then
+		return false
+	end
+
+	local parent = prompt.Parent
+	if not parent then
+		return false
+	end
+	return parent:GetAttribute("PlotIndex") == plot_index
+end
+
+--[[
+	Locally enables only the player's own plot prompts.
+
+	Args:
+		instance (Instance): Streamed instance to inspect.
+
+	Returns:
+		None.
+]]
+local function update_prompt_access(instance: Instance)
+	if not instance:IsA("ProximityPrompt")
+		or instance.Name ~= "BaseStationPrompt"
+	then
+		return
+	end
+	instance.Enabled = owns_prompt(instance)
+end
+
+--[[
+	Refreshes all currently streamed Base station prompts.
+
+	Args:
+		None.
+
+	Returns:
+		None.
+]]
+local function refresh_prompt_access()
+	local zones = workspace:FindFirstChild("Zones")
+	local safe = zones and zones:FindFirstChild("SafeZoneWorld")
+	if not safe then
+		return
+	end
+
+	for _, instance in ipairs(safe:GetDescendants()) do
+		update_prompt_access(instance)
+	end
 end
 
 --[[
@@ -635,6 +751,9 @@ local function on_prompt_triggered(
 	if triggering_player ~= player then
 		return
 	end
+	if not owns_prompt(prompt) then
+		return
+	end
 
 	local parent = prompt.Parent
 	if not parent then
@@ -674,6 +793,7 @@ ProximityPromptService.PromptTriggered:Connect(on_prompt_triggered)
 soul_remote.OnClientEvent:Connect(on_soul_payload)
 
 safe_world.DescendantAdded:Connect(function(instance)
+	update_prompt_access(instance)
 	if instance:IsA("BasePart")
 		or instance:IsA("ProximityPrompt")
 	then
@@ -687,12 +807,22 @@ player:GetAttributeChangedSignal("PvPZone"):Connect(function()
 	end
 
 	task.delay(0.35, function()
+		refresh_prompt_access()
 		request_snapshot()
 		schedule_base_render()
 	end)
 end)
 
+player:GetAttributeChangedSignal(
+	"SanctumPlotIndex"
+):Connect(function()
+	refresh_prompt_access()
+	request_snapshot()
+	schedule_base_render()
+end)
+
 task.defer(function()
 	task.wait(1)
+	refresh_prompt_access()
 	request_snapshot()
 end)
