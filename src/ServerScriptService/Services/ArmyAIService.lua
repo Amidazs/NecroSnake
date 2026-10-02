@@ -261,7 +261,11 @@ end
 local function snap_model_to_ground(model: Model, pos: Vector3): Vector3
 	-- Raycast down to find terrain height, then lift by half model height
 	-- so the model sits on top of the ground instead of sinking into it.
-	local origin = Vector3.new(pos.X, pos.Y + TELEPORT_RAYCAST_START_HEIGHT, pos.Z)
+	local origin = Vector3.new(
+		pos.X,
+		pos.Y + TELEPORT_RAYCAST_START_HEIGHT,
+		pos.Z
+	)
 	local direction = Vector3.new(0, -TELEPORT_RAYCAST_DISTANCE, 0)
 
 	local params = RaycastParams.new()
@@ -285,7 +289,11 @@ local function snap_model_to_ground(model: Model, pos: Vector3): Vector3
 end
 
 
-local function teleport_unit_to_player(unit_model: Model, player_pos: Vector3, slot_pos: Vector3?)
+local function teleport_unit_to_player(
+	unit_model: Model,
+	player_pos: Vector3,
+	slot_pos: Vector3?
+)
 	local u_root = get_model_root(unit_model)
 	if not u_root then
 		return
@@ -526,7 +534,10 @@ local function get_cached_enemy_candidates(
 	return cache.candidates
 end
 
-local function compute_damage_after_defense(target: Model, raw_damage: number): number
+local function compute_damage_after_defense(
+	target: Model,
+	raw_damage: number
+): number
 	local defense = target:GetAttribute("Defense")
 	if typeof(defense) ~= "number" then
 		defense = 0
@@ -589,6 +600,22 @@ local function try_attack(attacker: Model, target: Model, s: UnitState)
 		raw_damage = 10
 	end
 
+	local skill_multiplier = attacker:GetAttribute(
+		"SkillDamageMultiplier"
+	)
+	local multiplier_until = attacker:GetAttribute(
+		"SkillDamageMultiplierUntil"
+	)
+	if typeof(skill_multiplier) == "number"
+		and typeof(multiplier_until) == "number"
+		and multiplier_until > Workspace:GetServerTimeNow()
+	then
+		raw_damage *= math.clamp(skill_multiplier, 1, 1.5)
+	elseif multiplier_until ~= nil then
+		attacker:SetAttribute("SkillDamageMultiplier", nil)
+		attacker:SetAttribute("SkillDamageMultiplierUntil", nil)
+	end
+
 	local cooldown = attacker:GetAttribute("AttackCooldown")
 	if typeof(cooldown) ~= "number" then
 		cooldown = 1.0
@@ -642,10 +669,21 @@ local function compute_attack_approach_goal(
 
 	local angle = ((unit_index - 1) / count) * (math.pi * 2)
 
-	local max_radius = math.max(APPROACH_RADIUS_MIN, ATTACK_RANGE - APPROACH_RADIUS_MARGIN)
-	local radius = clamp((ATTACK_RANGE - 1.0) + extra, APPROACH_RADIUS_MIN, max_radius)
+	local max_radius = math.max(
+		APPROACH_RADIUS_MIN,
+		ATTACK_RANGE - APPROACH_RADIUS_MARGIN
+	)
+	local radius = clamp(
+		(ATTACK_RANGE - 1.0) + extra,
+		APPROACH_RADIUS_MIN,
+		max_radius
+	)
 
-	local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+	local offset = Vector3.new(
+		math.cos(angle) * radius,
+		0,
+		math.sin(angle) * radius
+	)
 	return Vector3.new(target_pos.X, target_pos.Y, target_pos.Z) + offset
 end
 
@@ -1190,7 +1228,11 @@ local function find_closest_engageable(
 	return best
 end
 
-local function move_unit_smooth(humanoid: Humanoid, s: UnitState, goal: Vector3)
+local function move_unit_smooth(
+	humanoid: Humanoid,
+	s: UnitState,
+	goal: Vector3
+)
 	local t = now()
 	local model = humanoid.Parent
 	local root: BasePart? = nil
@@ -1287,7 +1329,9 @@ local function move_unit_smooth(humanoid: Humanoid, s: UnitState, goal: Vector3)
 
 	if s.last_move_goal then
 		local delta = (goal - s.last_move_goal).Magnitude
-		if delta < MOVE_MIN_DELTA and (t - s.last_move_time) < MOVE_REISSUE_SECONDS then
+		if delta < MOVE_MIN_DELTA
+			and (t - s.last_move_time) < MOVE_REISSUE_SECONDS
+		then
 			return
 		end
 	end
@@ -1380,7 +1424,10 @@ local function get_army_center(player: Player, fallback: Vector3): Vector3
 	return total / count
 end
 
-local function snap_command_position(player: Player, requested: Vector3): Vector3
+local function snap_command_position(
+	player: Player,
+	requested: Vector3
+): Vector3
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.IgnoreWater = false
@@ -1467,11 +1514,19 @@ local function handle_command_request(
 
 	if action == "MOVE" then
 		if typeof(payload) ~= "Vector3" then
-			send_command_feedback(player, get_command_state(player).mode, "Choose a ground position.")
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"Choose a ground position."
+			)
 			return
 		end
 		if (payload - player_root.Position).Magnitude > COMMAND_MAX_DISTANCE then
-			send_command_feedback(player, get_command_state(player).mode, "That position is too far away.")
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"That position is too far away."
+			)
 			return
 		end
 
@@ -1550,17 +1605,32 @@ local function handle_command_request(
 
 	if action == "ATTACK" then
 		if typeof(payload) ~= "Instance" or not payload:IsA("Model") then
-			send_command_feedback(player, get_command_state(player).mode, "Choose an enemy target.")
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"Choose an enemy target."
+			)
 			return
 		end
 		if not is_valid_command_target(player, payload) then
-			send_command_feedback(player, get_command_state(player).mode, "That is not a valid enemy target.")
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"That is not a valid enemy target."
+			)
 			return
 		end
 
 		local target_root = get_root(payload)
-		if not target_root or (target_root.Position - player_root.Position).Magnitude > COMMAND_MAX_DISTANCE then
-			send_command_feedback(player, get_command_state(player).mode, "That enemy is too far away.")
+		if not target_root
+			or (target_root.Position - player_root.Position).Magnitude
+				> COMMAND_MAX_DISTANCE
+		then
+			send_command_feedback(
+				player,
+				get_command_state(player).mode,
+				"That enemy is too far away."
+			)
 			return
 		end
 

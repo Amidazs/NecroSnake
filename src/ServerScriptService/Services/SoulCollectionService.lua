@@ -14,7 +14,7 @@ local SoulProfileStore = require(
 
 local SoulCollectionService = {}
 
-local PROFILE_VERSION = 1
+local PROFILE_VERSION = 2
 local STARTING_SOUL_ESSENCE = 60
 local STARTING_BASE_LEVEL = 1
 local MAX_BASE_LEVEL = 3
@@ -60,6 +60,15 @@ type MachineState = {
 	paused: boolean,
 }
 
+type ProgressionState = {
+	xp: number,
+	level: number,
+	rebirth_count: number,
+	prestige_marks: number,
+	raise_successes: number,
+	equipped_skills: { string },
+}
+
 type Profile = {
 	version: number,
 	revision: number,
@@ -69,6 +78,7 @@ type Profile = {
 	soul_essence: number,
 	base_level: number,
 	starter_secured_count: number,
+	progression: ProgressionState,
 	persistent: boolean,
 	dirty: boolean,
 	save_token: number,
@@ -121,6 +131,17 @@ local function make_machine(
 	}
 end
 
+local function create_default_progression(): ProgressionState
+	return {
+		xp = 0,
+		level = 1,
+		rebirth_count = 0,
+		prestige_marks = 0,
+		raise_successes = 0,
+		equipped_skills = {},
+	}
+end
+
 local function create_default_profile(): Profile
 	local now = now_seconds()
 	return {
@@ -132,6 +153,7 @@ local function create_default_profile(): Profile
 		soul_essence = STARTING_SOUL_ESSENCE,
 		base_level = STARTING_BASE_LEVEL,
 		starter_secured_count = 0,
+		progression = create_default_progression(),
 		persistent = false,
 		dirty = false,
 		save_token = 0,
@@ -146,6 +168,55 @@ local function sanitize_positive_int(
 		return default_value
 	end
 	return math.max(0, math.floor(value))
+end
+
+local function sanitize_skill_list(raw: any): { string }
+	local skills: { string } = {}
+	if typeof(raw) ~= "table" then
+		return skills
+	end
+
+	local seen: { [string]: boolean } = {}
+	for _, skill_id in ipairs(raw) do
+		if typeof(skill_id) == "string"
+			and skill_id ~= ""
+			and not seen[skill_id]
+			and #skills < 3
+		then
+			seen[skill_id] = true
+			table.insert(skills, skill_id)
+		end
+	end
+	return skills
+end
+
+local function sanitize_progression(raw: any): ProgressionState
+	local progression = create_default_progression()
+	if typeof(raw) ~= "table" then
+		return progression
+	end
+
+	progression.xp = sanitize_positive_int(raw.xp, 0)
+	progression.level = math.max(
+		1,
+		sanitize_positive_int(raw.level, 1)
+	)
+	progression.rebirth_count = sanitize_positive_int(
+		raw.rebirth_count,
+		0
+	)
+	progression.prestige_marks = sanitize_positive_int(
+		raw.prestige_marks,
+		0
+	)
+	progression.raise_successes = sanitize_positive_int(
+		raw.raise_successes,
+		0
+	)
+	progression.equipped_skills = sanitize_skill_list(
+		raw.equipped_skills
+	)
+	return progression
 end
 
 local function sanitize_machine(
@@ -253,6 +324,7 @@ local function sanitize_profile(
 		0,
 		MAX_STARTER_UNITS_TO_SECURE
 	)
+	profile.progression = sanitize_progression(raw.progression)
 	profile.machines = {}
 
 	if typeof(raw.machines) == "table" then
@@ -537,6 +609,21 @@ local function copy_records(
 	return result
 end
 
+local function copy_progression(
+	progression: ProgressionState
+): ProgressionState
+	return {
+		xp = progression.xp,
+		level = progression.level,
+		rebirth_count = progression.rebirth_count,
+		prestige_marks = progression.prestige_marks,
+		raise_successes = progression.raise_successes,
+		equipped_skills = sanitize_skill_list(
+			progression.equipped_skills
+		),
+	}
+end
+
 local function masters_as_array(
 	profile: Profile
 ): { UnitRecord }
@@ -578,6 +665,7 @@ local function build_persistence_snapshot(profile: Profile)
 		soul_essence = profile.soul_essence,
 		base_level = profile.base_level,
 		starter_secured_count = profile.starter_secured_count,
+		progression = copy_progression(profile.progression),
 	}
 end
 
@@ -647,6 +735,7 @@ local function build_client_snapshot(
 		soulEssence = profile.soul_essence,
 		baseLevel = profile.base_level,
 		baseUpgradeCost = get_base_upgrade_cost(profile),
+		progression = copy_progression(profile.progression),
 		units = copy_records(profile.units),
 		masters = masters_as_array(profile),
 		machines = machines,
@@ -1313,6 +1402,35 @@ end
 
 function SoulCollectionService.save_now(player: Player): boolean
 	return save_profile_now(player)
+end
+
+function SoulCollectionService.get_progression_state(
+	player: Player
+): ProgressionState?
+	local profile = get_profile(player)
+	if not profile then
+		return nil
+	end
+	return copy_progression(profile.progression)
+end
+
+function SoulCollectionService.commit_progression_state(
+	player: Player,
+	raw: any
+): boolean
+	local profile = get_profile(player)
+	if not profile then
+		return false
+	end
+	profile.progression = sanitize_progression(raw)
+	mark_changed(player, profile, false)
+	return true
+end
+
+function SoulCollectionService.is_player_in_safe_zone(
+	player: Player
+): boolean
+	return is_player_in_safe_zone(player)
 end
 
 function SoulCollectionService.imprint_master(

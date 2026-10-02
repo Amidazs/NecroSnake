@@ -94,7 +94,11 @@ local channel_started_at = 0
 local channel_orb: Part? = nil
 local channel_track: AnimationTrack? = nil
 
-local function play_sound(sound_id: string, volume: number, playback_speed: number)
+local function play_sound(
+	sound_id: string,
+	volume: number,
+	playback_speed: number
+)
 	local sound = Instance.new("Sound")
 	sound.SoundId = sound_id
 	sound.Volume = volume
@@ -392,6 +396,21 @@ result_remote.OnClientEvent:Connect(function(payload)
 	show_message(message, payload.status)
 end)
 
+ProximityPromptService.PromptShown:Connect(function(prompt)
+	if not prompt:IsA("ProximityPrompt")
+		or prompt.Name ~= "NecroRaisePrompt"
+	then
+		return
+	end
+
+	local reach_bonus = player:GetAttribute("RaiseReachBonus")
+	if typeof(reach_bonus) ~= "number" then
+		reach_bonus = 0
+	end
+	prompt.MaxActivationDistance = 14
+		+ math.clamp(reach_bonus, 0, 5)
+end)
+
 ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
 	if prompt:IsA("ProximityPrompt") then
 		start_channel(prompt)
@@ -424,8 +443,21 @@ RunService.RenderStepped:Connect(function()
 
 	local elapsed = os.clock() - channel_started_at
 	local pulse = (math.sin(elapsed * 10) + 1) * 0.5
+	local channel_multiplier = player:GetAttribute(
+		"RaiseChannelMultiplier"
+	)
+	if typeof(channel_multiplier) ~= "number" then
+		channel_multiplier = 1
+	end
+	channel_multiplier = math.clamp(
+		channel_multiplier,
+		0.72,
+		1
+	)
+	local effective_duration = prompt.HoldDuration
+		* channel_multiplier
 	local raise_alpha = math.clamp(
-		elapsed / math.max(0.1, prompt.HoldDuration),
+		elapsed / math.max(0.1, effective_duration),
 		0,
 		1
 	)
@@ -440,7 +472,9 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
-player:GetAttributeChangedSignal("UsedCommandCapacity"):Connect(update_capacity)
+player:GetAttributeChangedSignal("UsedCommandCapacity"):Connect(
+	update_capacity
+)
 player:GetAttributeChangedSignal("CommandCapacity"):Connect(update_capacity)
 update_capacity()
 

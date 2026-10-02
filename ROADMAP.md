@@ -464,26 +464,71 @@ Work:
 
 ## Phase 6 - Necromancer levels, capacity, skills and Rebirth
 
-**Goal:** create clear long-term progression without making veteran PvP automatically unbeatable.
+**Status:** COMPLETE - progression, skills, Rebirth and two-client PvP
+acceptance GREEN on 2 October 2026.
+
+**Goal:** create clear long-term progression without making veteran PvP
+automatically unbeatable.
 
 Work:
-- Necromancer XP and levels.
-- Command Capacity progression.
-- Raise proficiency progression.
-- Raise speed/reach progression where appropriate.
-- Weighted unit capacity.
-- Skill-slot unlocks.
-- Maximum 3 equipped Necromancer skills.
-- Skill loadout changed only at Base.
-- Initial skills: Bone Wall, Fear Pulse, Rally, Corpse Explosion, Regroup, Sacrifice/Frenzy candidates.
-- Rebirth system.
-- Rebirth rewards focused on options/prestige/base progression rather than huge raw damage multipliers.
+- [x] Persistent Necromancer XP and levels.
+- [x] Command Capacity progression.
+- [x] Raise proficiency progression.
+- [x] Raise speed/reach progression.
+- [x] Weighted unit capacity.
+- [x] Skill-slot unlocks.
+- [x] Maximum 3 equipped Necromancer skills.
+- [x] Skill loadout changed only at Base.
+- [x] Bone Wall, Fear Pulse, Rally, Corpse Explosion, Regroup,
+  Sacrifice and Rebirth-only Frenzy.
+- [x] Rebirth system.
+- [x] Rebirth rewards focused on options/prestige/base progression rather
+  than large raw combat multipliers.
 
 **Acceptance:**
-- Level progression visibly expands army possibilities.
-- Level 1 works with a small army and no active skill slots.
-- Higher levels allow larger/more specialised compositions.
-- Rebirth is desirable without making new-player PvP pointless.
+- [x] Level progression visibly expands army possibilities.
+- [x] Level 1 works with a small army and no active skill slots.
+- [x] Higher levels allow larger/more specialised compositions.
+- [x] Rebirth adds meaningful options without applying veteran-only raw
+  unit-stat multipliers.
+
+**2 October 2026 Phase 6 playtest evidence:**
+- Progression is stored inside the versioned Soul profile and survives the
+  existing save/reload path.
+- Level 1 starts at 5 Command Capacity, zero active skill slots, no Raise
+  reach bonus and the original Raise channel duration.
+- Weighted capacity was validated at level 1. A Giant Skeleton Knight plus
+  a normal Skeleton Knight filled the full 5 Command Capacity; a further
+  Skeleton was rejected. A 10-cost Grave Baron was also correctly blocked.
+- Raise successes, NPC unit kills and enemy Necromancer kills award
+  progression XP. The integrated test advanced level 1 to level 2 and
+  retained the expected XP remainder.
+- Level 30 provides 45 Command Capacity, three active skill slots, +5 studs
+  of Raise reach and a 0.8 Raise channel multiplier.
+- Level 30 successfully commanded four 10-cost Grave Barons while respecting
+  the 45-point weighted capacity ceiling.
+- Base-only loadout editing accepted a three-skill loadout and rejected the
+  same edit attempt from the Arena.
+- Bone Wall spawned five temporary blocking segments and respected cooldown.
+- Rally applied the intended temporary army damage multiplier.
+- Corpse Explosion consumed the selected corpse and dealt 34 damage in the
+  acceptance test.
+- Regroup returned displaced undead to the Necromancer, Fear Pulse disabled
+  a nearby enemy temporarily, and Sacrifice traded one undead for player
+  healing.
+- Rebirth at level 30 reset level/XP/skill slots, incremented Rebirth and
+  Prestige Mark counts, and persisted across a save/reload. Rebirth level 1
+  had 7 Command Capacity rather than a raw damage advantage.
+- Rebirth 1 unlocked Frenzy at level 10. Frenzy traded army health for a
+  temporary damage option, preserving its risk/reward role.
+- A real local-server test with two Studio clients passed. The level-1 player
+  had 5 Command / 0 skill slots; the level-30 player had 45 Command /
+  3 skill slots. Equivalent Skeletons had identical raw combat stats, both
+  sides dealt PvP damage, and the smaller level-1 army still damaged the
+  progressed player's larger army.
+- Final production-runtime regression had all Phase 6 harnesses removed and
+  restored the normal Teleport UI. Progression, Backpack and Teleport GUIs
+  all loaded at level 1 with 5 Command / 0 skill slots and no runtime errors.
 
 ## Phase 7 - Factions and army identity
 
@@ -611,18 +656,22 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Begin Phase 6: Necromancer levels, capacity, skills and Rebirth.**
+**Begin Phase 7: Factions and army identity.**
 
-Phase 5 now provides the persistent ownership layer that Phase 6 progression
-can build on. The next milestone is to make Necromancer growth expand tactical
-options without making veteran PvP automatically unbeatable.
+Phase 6 now supplies the persistent progression and tactical-skill layer.
+Phase 7 should make battlefield collection strategically interesting by making
+different NPC factions produce visibly and mechanically different army parts.
 
-The first Phase 6 slice is:
-1. Add persistent Necromancer XP and level records.
-2. Drive Command Capacity from level/progression rather than test attributes.
-3. Add Raise proficiency progression without allowing guaranteed rare Raises.
-4. Add weighted capacity rules for larger/elite units.
-5. Add the three-slot Necromancer skill loadout and Base-only editing.
-6. Implement the first active skill set and server-side validation.
-7. Add the Rebirth record/reward loop with option/prestige-focused rewards.
-8. Run small-army versus progressed-army PvP checks before accepting the phase.
+The first Phase 7 slice is:
+1. Define the initial autonomous factions and their regional identities.
+2. Give each faction a readable mix of frontline, ranged, support and special
+   roles.
+3. Make factions fight one another without player initiation.
+4. Preserve each unit's combat role after it is Raised.
+5. Add faction-specific rare and elite units without bypassing weighted
+   Command Capacity.
+6. Make silhouettes, weapons and combat behaviour readable at distance.
+7. Validate that equal-capacity players can deliberately build meaningfully
+   different army compositions.
+8. Validate that autonomous faction battles generate usable corpse
+   opportunities for nearby Necromancers.

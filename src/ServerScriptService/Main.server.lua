@@ -50,6 +50,14 @@ local SoulCollectionService = require(
 	ServicesFolder:WaitForChild("SoulCollectionService")
 )
 
+local NecromancerProgressionService = require(
+	ServicesFolder:WaitForChild("NecromancerProgressionService")
+)
+
+local NecromancerSkillService = require(
+	ServicesFolder:WaitForChild("NecromancerSkillService")
+)
+
 local FormationProfileService = require(
 	ServicesFolder:WaitForChild("FormationProfileService")
 )
@@ -117,6 +125,8 @@ local function main()
 	Remotes.banish_request()
 	Remotes.formation_profile()
 	Remotes.soul_collection()
+	Remotes.progression()
+	Remotes.skills()
 
 	-- Fix weapon client infinite yield (expects this at ReplicatedStorage root)
 	ensure_remote_event_root("NecroMVP_Swing")
@@ -128,6 +138,8 @@ local function main()
 		UnitRecordService
 	)
 	SoulCollectionService.start()
+	NecromancerProgressionService.init(SoulCollectionService)
+	NecromancerProgressionService.start()
 	BackpackService.init(SoulCollectionService)
 	BackpackService.start()
 
@@ -138,19 +150,32 @@ local function main()
 		FormationProfileService,
 		UnitRecordService
 	)
-	PvPService.init(ArmyService)
+	PvPService.init(
+		ArmyService,
+		NecromancerProgressionService
+	)
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
 	NPCService.init(ModelLibraryService, ArmyService)
-	CombatService.init(ArmyService, PvPService)
+	CombatService.init(
+		ArmyService,
+		PvPService,
+		NecromancerProgressionService
+	)
 	PlayerCombatService.init(PvPService)
+	NecromancerSkillService.init(
+		ArmyService,
+		NecromancerProgressionService,
+		PvPService
+	)
 
 	PvPService.start()
 	NPCService.start()
 	ArmyAIService.start()
 	CombatService.start()
 	ArmyRegenService.start()
+	NecromancerSkillService.start()
 
 	TeleportService.init(
 		ArmyService,

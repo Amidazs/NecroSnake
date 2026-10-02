@@ -24,6 +24,7 @@ local SAFE_ZONE_WORLD_NAME = "SafeZoneWorld"
 local ZONES_FOLDER_NAME = "Zones"
 
 local army_service = nil :: any
+local progression_service = nil :: any
 local did_start = false
 local zone_task: thread? = nil
 
@@ -215,6 +216,11 @@ local function hook_character(player: Player, character: Model)
 
 		if killer then
 			increment_number_attribute(killer, "PvPKills")
+			if progression_service
+				and progression_service.record_necromancer_kill
+			then
+				progression_service.record_necromancer_kill(killer)
+			end
 		end
 	end)
 end
@@ -276,8 +282,12 @@ local function handle_player_removing(player: Player)
 	army_service.clear_army(player)
 end
 
-function PvPService.init(army_service_ref: any)
+function PvPService.init(
+	army_service_ref: any,
+	progression_service_ref: any?
+)
 	army_service = army_service_ref
+	progression_service = progression_service_ref
 end
 
 function PvPService.is_in_safe_zone(player: Player): boolean
@@ -402,6 +412,19 @@ function PvPService.record_unit_death(model: Model)
 	end
 	if killer then
 		increment_number_attribute(killer, "PvPUnitKills")
+		if progression_service
+			and progression_service.record_unit_kill
+		then
+			local command_cost = model:GetAttribute("CommandCost")
+			if typeof(command_cost) ~= "number" then
+				command_cost = 1
+			end
+			progression_service.record_unit_kill(
+				killer,
+				command_cost,
+				true
+			)
+		end
 	end
 end
 

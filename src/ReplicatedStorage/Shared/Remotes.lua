@@ -78,5 +78,13 @@ function Remotes.soul_collection(): RemoteEvent
 	return Remotes.get_or_create_event("SoulCollection")
 end
 
+function Remotes.progression(): RemoteEvent
+	return Remotes.get_or_create_event("NecromancerProgression")
+end
+
+function Remotes.skills(): RemoteEvent
+	return Remotes.get_or_create_event("NecromancerSkills")
+end
+
 
 return Remotes

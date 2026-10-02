@@ -15,6 +15,7 @@ local CORPSE_LIFETIME_SECONDS = 20
 local CLAIM_SECONDS = 6
 local MAX_FAILED_RAISES = 3
 local RAISE_DISTANCE = 14
+local MAX_RAISE_REACH_BONUS = 5
 local RAISE_HOLD_SECONDS = 1.15
 local BANISH_DISTANCE = 35
 local SCAN_SECONDS = 0.5
@@ -30,6 +31,7 @@ local CORPSES_FOLDER_NAME = "Corpses"
 
 local army_service = nil :: any
 local pvp_service = nil :: any
+local progression_service = nil :: any
 local running = false
 local scan_task: thread? = nil
 local result_remote: RemoteEvent? = nil
@@ -244,7 +246,10 @@ local function get_claim_owner(model: Model): number
 	return 0
 end
 
-local function is_claimed_by_other(model: Model, player: Player): (boolean, number)
+local function is_claimed_by_other(
+	model: Model,
+	player: Player
+): (boolean, number)
 	local claim_owner = get_claim_owner(model)
 	local claim_expires = model:GetAttribute(ATTR_CLAIM_EXPIRES)
 	if claim_owner == 0 or claim_owner == player.UserId then
@@ -264,7 +269,17 @@ local function validate_raise_distance(player: Player, model: Model): boolean
 	if not player_root or not corpse_root then
 		return false
 	end
-	return (player_root.Position - corpse_root.Position).Magnitude <= RAISE_DISTANCE + 2
+	local reach_bonus = player:GetAttribute("RaiseReachBonus")
+	if typeof(reach_bonus) ~= "number" then
+		reach_bonus = 0
+	end
+	reach_bonus = math.clamp(
+		reach_bonus,
+		0,
+		MAX_RAISE_REACH_BONUS
+	)
+	return (player_root.Position - corpse_root.Position).Magnitude
+		<= RAISE_DISTANCE + reach_bonus + 2
 end
 
 local function handle_raise(player: Player, model: Model)
@@ -315,7 +330,9 @@ local function handle_raise(player: Player, model: Model)
 
 	processing[model] = true
 	local corpse_root = get_root(model)
-	local corpse_position = corpse_root and corpse_root.Position or model:GetPivot().Position
+	local corpse_position = if corpse_root
+		then corpse_root.Position
+		else model:GetPivot().Position
 
 	local success, status, chance, command_cost =
 		army_service.try_raise_dead(player, model)
@@ -339,6 +356,14 @@ local function handle_raise(player: Player, model: Model)
 	end
 
 	if success then
+		if progression_service
+			and progression_service.record_raise_success
+		then
+			progression_service.record_raise_success(
+				player,
+				command_cost
+			)
+		end
 		send_result(player, {
 			kind = "raise",
 			status = "SUCCESS",
@@ -417,10 +442,54 @@ local function create_raise_prompt(model: Model, root: BasePart)
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.HoldDuration = RAISE_HOLD_SECONDS
 	prompt.MaxActivationDistance = RAISE_DISTANCE
+		+ MAX_RAISE_REACH_BONUS
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = root
 
+	local hold_tokens: { [number]: number } = {}
+	local early_completed: { [number]: boolean } = {}
+
+	prompt.PromptButtonHoldBegan:Connect(function(player)
+		local user_id = player.UserId
+		hold_tokens[user_id] = (hold_tokens[user_id] or 0) + 1
+		local token = hold_tokens[user_id]
+
+		local multiplier = player:GetAttribute(
+			"RaiseChannelMultiplier"
+		)
+		if typeof(multiplier) ~= "number" then
+			multiplier = 1
+		end
+		multiplier = math.clamp(multiplier, 0.72, 1)
+		if multiplier >= 0.999 then
+			return
+		end
+
+		task.delay(RAISE_HOLD_SECONDS * multiplier, function()
+			if hold_tokens[user_id] ~= token
+				or model.Parent == nil
+				or prompt.Parent == nil
+			then
+				return
+			end
+			if not validate_raise_distance(player, model) then
+				return
+			end
+			early_completed[user_id] = true
+			handle_raise(player, model)
+		end)
+	end)
+
+	prompt.PromptButtonHoldEnded:Connect(function(player)
+		local user_id = player.UserId
+		hold_tokens[user_id] = (hold_tokens[user_id] or 0) + 1
+	end)
+
 	prompt.Triggered:Connect(function(player)
+		if early_completed[player.UserId] then
+			early_completed[player.UserId] = nil
+			return
+		end
 		handle_raise(player, model)
 	end)
 end
@@ -437,6 +506,29 @@ local function initialize_corpse(model: Model)
 	if pvp_service and pvp_service.record_unit_death then
 		pvp_service.record_unit_death(model)
 	end
+
+	local former_owner = model:GetAttribute("ArmyOwnerUserId")
+	local killer_user_id = model:GetAttribute("LastHitOwnerUserId")
+	if progression_service
+		and progression_service.record_unit_kill
+		and typeof(killer_user_id) == "number"
+		and killer_user_id > 0
+		and (typeof(former_owner) ~= "number" or former_owner == 0)
+	then
+		local killer = Players:GetPlayerByUserId(killer_user_id)
+		if killer then
+			local command_cost = model:GetAttribute("CommandCost")
+			if typeof(command_cost) ~= "number" then
+				command_cost = 1
+			end
+			progression_service.record_unit_kill(
+				killer,
+				command_cost,
+				false
+			)
+		end
+	end
+
 	if model:GetAttribute("LastDamageSourceKind") == "NPC" then
 		model:SetAttribute("NoRaiseReason", "NPC_KILL")
 		model:Destroy()
@@ -468,7 +560,8 @@ local function initialize_corpse(model: Model)
 	model.Parent = get_or_create_corpses_folder()
 
 	-- A dead unit is a static resource, not an active actor. Freeze movement and
-	-- collision immediately so old MoveTo/physics impulses cannot drag the corpse.
+	-- Disable collision immediately so old MoveTo/physics impulses cannot
+	-- drag the corpse.
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = 0
@@ -540,11 +633,13 @@ local function watch_container(container: Instance)
 		return
 	end
 	scan_and_hook(container)
-	container_connections[container] = container.DescendantAdded:Connect(function(inst)
-		if inst:IsA("Model") then
-			attach_death_hook(inst)
+	container_connections[container] = container.DescendantAdded:Connect(
+		function(inst)
+			if inst:IsA("Model") then
+				attach_death_hook(inst)
+			end
 		end
-	end)
+	)
 end
 
 local function handle_banish(player: Player, model: Instance)
@@ -576,10 +671,12 @@ end
 
 function CombatService.init(
 	army_service_module,
-	pvp_service_ref: any?
+	pvp_service_ref: any?,
+	progression_service_ref: any?
 )
 	army_service = army_service_module
 	pvp_service = pvp_service_ref
+	progression_service = progression_service_ref
 end
 
 function CombatService.start()
