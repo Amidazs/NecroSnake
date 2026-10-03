@@ -22,12 +22,12 @@ local COLORS = {
 }
 
 local FACILITY_PURPOSE: { [string]: string } = {
-	SoulFoundry = "CLONE STORED MASTERS",
+	SoulFoundry = "MASTER TUBE • GROW CLONES",
 	FormationEditor = "EDIT ARMY FORMATIONS",
 	SkillLoadout = "EQUIP & LEARN SKILLS",
 	Codex = "RAISE UNITS • UNLOCK BONUSES",
 	SoulCrucible = "SACRIFICE UNITS FOR ESSENCE",
-	Masters = "VIEW & SELECT MASTER TEMPLATES",
+	ReserveCrypt = "STORE & MANAGE RESERVE UNITS",
 	Trophies = "DISPLAY DEFEATED BOSSES",
 	Upgrades = "UPGRADE YOUR SANCTUM",
 }
@@ -1145,7 +1145,7 @@ local function add_crucible_identity(
 end
 
 --[[
-	Adds the Archive's rear gallery arch.
+	Adds the Reserve Crypt's stone alcove identity.
 
 	Args:
 		parent (Instance): Station model receiving the props.
@@ -1155,20 +1155,31 @@ end
 	Returns:
 		None.
 ]]
-local function add_archive_identity(
+local function add_reserve_crypt_identity(
 	parent: Instance,
 	station_cf: CFrame,
 	color: Color3
 )
 	make_part(
 		parent,
-		"ArchiveHeader",
-		Vector3.new(32, 4, 4),
-		station_cf * CFrame.new(0, 15, 18),
-		color:Lerp(Color3.fromRGB(45, 40, 49), 0.5),
-		Enum.Material.Marble,
+		"CryptRearWall",
+		Vector3.new(44, 15, 3),
+		station_cf * CFrame.new(0, 7.5, 18),
+		color:Lerp(Color3.fromRGB(37, 34, 42), 0.65),
+		Enum.Material.Slate,
 		true
 	)
+	for _, x in ipairs({ -18, -6, 6, 18 }) do
+		make_part(
+			parent,
+			"CryptPillar",
+			Vector3.new(3, 15, 4),
+			station_cf * CFrame.new(x, 7.5, 15),
+			Color3.fromRGB(59, 54, 65),
+			Enum.Material.Slate,
+			true
+		)
+	end
 end
 
 --[[
@@ -1272,8 +1283,8 @@ local function add_station_identity(
 		add_codex_identity(parent, station_cf, color)
 	elseif station_id == "SoulCrucible" then
 		add_crucible_identity(parent, station_cf, color)
-	elseif station_id == "Masters" then
-		add_archive_identity(parent, station_cf, color)
+	elseif station_id == "ReserveCrypt" then
+		add_reserve_crypt_identity(parent, station_cf, color)
 	elseif station_id == "Trophies" then
 		add_trophy_identity(parent, station_cf, color)
 	elseif station_id == "Upgrades" then
@@ -1503,10 +1514,106 @@ local function tag_machine_visual(
 end
 
 --[[
-	Creates a paired Master -> Clone display bay.
+	Creates one visible cloning tube and its hidden display anchor.
 
-	Each machine has two separate front-facing tubes so the player can read
-	the cloning process from the plot entrance rather than walking behind it.
+	Args:
+		parent (Instance): Soul Foundry station.
+		name (string): Tube name prefix.
+		tube_cf (CFrame): Tube centre transform.
+		label_text (string): World label above the tube.
+		plot_index (number): Owning plot index.
+		machine_index (number?): Clone tube index, or nil for Master Tube.
+
+	Returns:
+		BasePart: Hidden display anchor inside the tube.
+]]
+local function add_clone_tube(
+	parent: Instance,
+	name: string,
+	tube_cf: CFrame,
+	label_text: string,
+	plot_index: number,
+	machine_index: number?
+): BasePart
+	local anchor = make_part(
+		parent,
+		name .. "Anchor",
+		Vector3.new(1, 1, 1),
+		tube_cf,
+		COLORS.soul,
+		Enum.Material.SmoothPlastic,
+		false,
+		1
+	)
+	anchor.CanQuery = false
+	anchor:SetAttribute("PlotIndex", plot_index)
+
+	if machine_index then
+		anchor:SetAttribute("MachineIndex", machine_index)
+	else
+		anchor:SetAttribute("MasterTubeAnchor", true)
+	end
+
+	local tube = make_part(
+		parent,
+		name,
+		Vector3.new(8, 20, 8),
+		tube_cf,
+		COLORS.soul,
+		Enum.Material.Glass,
+		true,
+		0.42
+	)
+	if machine_index then
+		tag_machine_visual(tube, machine_index)
+	end
+
+	for _, y in ipairs({ -10.8, 10.8 }) do
+		local cap = make_part(
+			parent,
+			name .. "Cap",
+			Vector3.new(9.2, 1.6, 9.2),
+			tube.CFrame * CFrame.new(0, y, 0),
+			Color3.fromRGB(63, 55, 72),
+			Enum.Material.Metal,
+			true
+		)
+		if machine_index then
+			tag_machine_visual(cap, machine_index)
+		end
+	end
+
+	local light = Instance.new("PointLight")
+	light.Color = COLORS.soul
+	light.Brightness = 1.6
+	light.Range = 13
+	light.Parent = tube
+
+	local label = make_world_label(
+		parent,
+		name .. "Label",
+		(tube_cf * CFrame.new(0, 13.5, 0)).Position,
+		label_text,
+		COLORS.soul
+	)
+	local gui = label:FindFirstChild("Label")
+	if gui and gui:IsA("BillboardGui") then
+		gui.Size = UDim2.fromOffset(150, 52)
+	end
+	if machine_index then
+		label:SetAttribute(
+			"CloneTubeLabelIndex",
+			machine_index
+		)
+	end
+	return anchor
+end
+
+--[[
+	Creates one shared Master Clone Tube plus three clone tubes.
+
+	The Master unit is visible in one dedicated tube. Every unlocked clone
+	tube beside it produces copies of that same unit.
 
 	Args:
 		parent (Instance): Soul Foundry station.
@@ -1521,95 +1628,42 @@ local function add_clone_chambers(
 	station_cf: CFrame,
 	plot_index: number
 )
-	for index = 1, 3 do
-		local machine_x = (index - 2) * 21
-		local machine_cf = station_cf * CFrame.new(
-			machine_x,
-			11,
-			-1
-		)
-		local anchor = make_part(
+	add_clone_tube(
+		parent,
+		"MasterCloneTube",
+		station_cf * CFrame.new(-27, 11, -1),
+		"MASTER TUBE",
+		plot_index,
+		nil
+	)
+
+	for index, x in ipairs({ -9, 9, 27 }) do
+		add_clone_tube(
 			parent,
-			("CloneMachineAnchor%d"):format(index),
-			Vector3.new(1, 1, 1),
-			machine_cf,
-			COLORS.soul,
-			Enum.Material.SmoothPlastic,
-			false,
-			1
+			("CloneTube%d"):format(index),
+			station_cf * CFrame.new(x, 11, -1),
+			("CLONE TUBE %d"):format(index),
+			plot_index,
+			index
 		)
-		anchor.CanQuery = false
-		anchor:SetAttribute("MachineIndex", index)
-		anchor:SetAttribute("PlotIndex", plot_index)
-
-		for _, entry in ipairs({
-			{ name = "Master", x = -4.5 },
-			{ name = "Clone", x = 4.5 },
-		}) do
-			local tube = make_part(
-				parent,
-				("%sTube%d"):format(entry.name, index),
-				Vector3.new(7, 20, 7),
-				machine_cf * CFrame.new(entry.x, 0, 0),
-				COLORS.soul,
-				Enum.Material.Glass,
-				true,
-				0.42
-			)
-			tag_machine_visual(tube, index)
-
-			for _, y in ipairs({ -10.8, 10.8 }) do
-				local cap = make_part(
-					parent,
-					("%sTubeCap%d"):format(
-						entry.name,
-						index
-					),
-					Vector3.new(8.2, 1.6, 8.2),
-					tube.CFrame * CFrame.new(0, y, 0),
-					Color3.fromRGB(63, 55, 72),
-					Enum.Material.Metal,
-					true
-				)
-				tag_machine_visual(cap, index)
-			end
-
-			local light = Instance.new("PointLight")
-			light.Color = COLORS.soul
-			light.Brightness = 1.6
-			light.Range = 13
-			light.Parent = tube
-		end
-
-		local machine_label = make_world_label(
-			parent,
-			("CloneMachineLabel%d"):format(index),
-			(
-				machine_cf
-					* CFrame.new(0, 13.5, 0)
-			).Position,
-			("BAY %d\nMASTER  →  CLONE"):format(index),
-			COLORS.soul
-		)
-		local gui = machine_label:FindFirstChild("Label")
-		if gui and gui:IsA("BillboardGui") then
-			gui.Size = UDim2.fromOffset(190, 52)
-		end
 	end
 end
 
 --[[
-	Creates Master display plinths inside one plot gallery.
+	Creates visible Reserve Crypt alcoves for stored units.
+
+	These are presentation slots only. The Reserve Crypt does not cap how
+	many units the player may deliberately store at the Sanctum.
 
 	Args:
-		parent (Instance): Gallery station.
-		station_cf (CFrame): Gallery transform.
+		parent (Instance): Reserve Crypt station.
+		station_cf (CFrame): Crypt transform.
 		plot_index (number): Owning plot index.
 
 	Returns:
 		None.
 ]]
-local function add_master_plinths(
+local function add_reserve_plinths(
 	parent: Instance,
 	station_cf: CFrame,
 	plot_index: number
@@ -1621,14 +1675,14 @@ local function add_master_plinths(
 		local z = if row == 1 then -15 else 15
 		local plinth = make_part(
 			parent,
-			("MasterPlinth%d"):format(index),
-			Vector3.new(6, 4, 6),
-			station_cf * CFrame.new(x, 2, z),
-			Color3.fromRGB(88, 74, 96),
-			Enum.Material.Marble,
+			("ReserveAlcove%d"):format(index),
+			Vector3.new(6, 3, 6),
+			station_cf * CFrame.new(x, 1.5, z),
+			Color3.fromRGB(73, 66, 80),
+			Enum.Material.Slate,
 			true
 		)
-		plinth:SetAttribute("MasterDisplaySlot", index)
+		plinth:SetAttribute("ReserveDisplaySlot", index)
 		plinth:SetAttribute("PlotIndex", plot_index)
 	end
 end
@@ -1804,7 +1858,7 @@ local function add_plot_guide(
 			"SANCTUM\n"
 			.. "FRONT • COMMAND & SKILLS\n"
 			.. "MIDDLE • STUDY, SACRIFICE & UPGRADES\n"
-			.. "REAR • MASTERS, CLONING & TROPHIES"
+			.. "REAR • RESERVES, CLONING & TROPHIES"
 		),
 		COLORS.soul
 	)
@@ -1831,7 +1885,7 @@ local function set_plot_upgrade_defaults(plot: Model)
 		SkillReliquaryLevel = 1,
 		CodexLevel = 1,
 		SoulCrucibleLevel = 1,
-		MasterGalleryLevel = 1,
+		ReserveCryptLevel = 1,
 		TrophyHallLevel = 1,
 		UpgradeForgeLevel = 1,
 	}
@@ -1894,7 +1948,7 @@ local function build_plot_facilities(
 	local codex_cf = surface_cf * CFrame.new(-80, 0, 10)
 	local crucible_cf = surface_cf * CFrame.new(0, 0, 10)
 	local forge_cf = surface_cf * CFrame.new(80, 0, 10)
-	local master_cf = surface_cf * CFrame.new(-84, 0, 76)
+	local reserve_cf = surface_cf * CFrame.new(-84, 0, 76)
 	local soul_cf = surface_cf * CFrame.new(0, 0, 76)
 	local trophy_cf = surface_cf * CFrame.new(84, 0, 76)
 
@@ -1958,19 +2012,19 @@ local function build_plot_facilities(
 		"UpgradeForgeLevel"
 	)
 
-	local gallery = make_station(
+	local reserve_crypt = make_station(
 		facilities,
-		"Master Archive",
-		master_cf,
-		Color3.fromRGB(150, 112, 174),
-		"Masters",
+		"Reserve Crypt",
+		reserve_cf,
+		Color3.fromRGB(116, 103, 134),
+		"ReserveCrypt",
 		plot_index,
 		58,
-		"MasterGalleryLevel"
+		"ReserveCryptLevel"
 	)
-	add_master_plinths(
-		gallery,
-		master_cf,
+	add_reserve_plinths(
+		reserve_crypt,
+		reserve_cf,
 		plot_index
 	)
 

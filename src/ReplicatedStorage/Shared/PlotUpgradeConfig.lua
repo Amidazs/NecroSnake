@@ -11,7 +11,7 @@ local FACILITY_ORDER = {
 	"SkillReliquary",
 	"Codex",
 	"SoulCrucible",
-	"MasterGallery",
+	"ReserveCrypt",
 	"TrophyHall",
 	"UpgradeForge",
 }
@@ -59,8 +59,8 @@ local DEFINITIONS = {
 			[3] = 240,
 		},
 	},
-	MasterGallery = {
-		name = "Master Archive",
+	ReserveCrypt = {
+		name = "Reserve Crypt",
 		costs = {
 			[2] = 120,
 			[3] = 300,
@@ -100,7 +100,7 @@ local SACRIFICE_MULTIPLIER_BY_LEVEL = {
 	[3] = 1.30,
 }
 
-local MASTER_CAPACITY_BY_LEVEL = {
+local RESERVE_DISPLAY_SLOTS_BY_LEVEL = {
 	[1] = 6,
 	[2] = 10,
 	[3] = 14,
@@ -333,18 +333,21 @@ function PlotUpgradeConfig.get_dissolve_multiplier(
 end
 
 --[[
-	Returns the stored Master capacity for Gallery level.
+	Returns the number of Reserve Crypt display alcoves at one level.
+
+	Reserve storage itself is not capped. Upgrades expand the physical
+	presentation so more stored units can be seen around the Crypt.
 
 	Args:
-		level (number): Master Gallery level.
+		level (number): Reserve Crypt level.
 
 	Returns:
-		number: Maximum safely stored Masters.
+		number: Number of reserve-unit display alcoves.
 ]]
-function PlotUpgradeConfig.get_master_capacity(
+function PlotUpgradeConfig.get_reserve_display_slots(
 	level: number
 ): number
-	return MASTER_CAPACITY_BY_LEVEL[clamp_level(level)]
+	return RESERVE_DISPLAY_SLOTS_BY_LEVEL[clamp_level(level)]
 end
 
 --[[
@@ -413,9 +416,11 @@ function PlotUpgradeConfig.get_effect_text(
 			(multiplier - 1) * 100 + 0.5
 		)
 		return ("%d%% sacrifice Essence bonus"):format(bonus)
-	elseif facility_id == "MasterGallery" then
-		return ("%d stored Masters"):format(
-			PlotUpgradeConfig.get_master_capacity(safe_level)
+	elseif facility_id == "ReserveCrypt" then
+		return ("%d reserve units shown in Crypt"):format(
+			PlotUpgradeConfig.get_reserve_display_slots(
+				safe_level
+			)
 		)
 	elseif facility_id == "TrophyHall" then
 		return ("%d boss trophy displays"):format(

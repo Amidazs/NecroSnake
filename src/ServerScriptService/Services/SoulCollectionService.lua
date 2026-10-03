@@ -26,7 +26,7 @@ local SoulProfileStore = require(
 
 local SoulCollectionService = {}
 
-local PROFILE_VERSION = 4
+local PROFILE_VERSION = 5
 local STARTING_SOUL_ESSENCE = 60
 local STARTING_BASE_LEVEL = 1
 local MAX_BASE_LEVEL = PlotUpgradeConfig.get_max_level()
@@ -240,6 +240,17 @@ local function sanitize_plot_upgrades(
 		end
 	end
 
+	if typeof(raw) == "table"
+		and typeof(raw.ReserveCrypt) ~= "number"
+		and typeof(raw.MasterGallery) == "number"
+	then
+		upgrades.ReserveCrypt = math.clamp(
+			math.floor(raw.MasterGallery),
+			1,
+			max_level
+		)
+	end
+
 	upgrades.SoulFoundry = math.max(
 		upgrades.SoulFoundry,
 		math.clamp(
@@ -445,6 +456,89 @@ local function sanitize_masters(raw: any): { [string]: UnitRecord }
 	return masters
 end
 
+--[[
+	Returns the single unit currently occupying the Master Clone Tube.
+
+	Legacy profiles may briefly contain more than one old Master record while
+	they are being migrated. Runtime gameplay always keeps at most one.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		UnitRecord?: Current Master Clone Tube unit.
+]]
+local function get_master_tube_record(
+	profile: Profile
+): UnitRecord?
+	for _, record in pairs(profile.masters) do
+		return record
+	end
+	return nil
+end
+
+--[[
+	Migrates legacy Master storage into the single Master Clone Tube.
+
+	One legacy Master is retained as the tube unit. Any additional legacy
+	Masters are safely returned to Reserve Crypt storage. All clone tubes are
+	then pointed at the same Master Tube template.
+
+	Args:
+		profile (Profile): Sanitized player profile.
+
+	Returns:
+		None.
+]]
+local function normalize_master_tube_state(profile: Profile)
+	local ids: { string } = {}
+	for record_id in pairs(profile.masters) do
+		table.insert(ids, record_id)
+	end
+	table.sort(ids)
+
+	local selected_id = nil
+	for _, machine in ipairs(profile.machines) do
+		local candidate = machine.master_id
+		if candidate and profile.masters[candidate] then
+			selected_id = candidate
+			break
+		end
+	end
+	selected_id = selected_id or ids[1]
+
+	local selected = if selected_id
+		then profile.masters[selected_id]
+		else nil
+	local kept: { [string]: UnitRecord } = {}
+
+	for record_id, record in pairs(profile.masters) do
+		if selected_id and record_id == selected_id then
+			record.deployed_master_id = nil
+			record.acquisition_kind = "MasterTube"
+			kept[record_id] = record
+		else
+			record.deployed_master_id = nil
+			record.acquisition_kind = "Reserve"
+			table.insert(profile.units, record)
+		end
+	end
+	profile.masters = kept
+
+	for _, machine in ipairs(profile.machines) do
+		machine.master_id = selected_id
+		if machine.output_count > 0 then
+			machine.paused = true
+		elseif selected then
+			machine.master_snapshot = copy_record(selected)
+			machine.paused = false
+		else
+			machine.master_snapshot = nil
+			machine.paused = true
+		end
+	end
+end
+
 local function ensure_machine_count(profile: Profile)
 	local required = math.clamp(
 		profile.base_level,
@@ -518,6 +612,7 @@ local function sanitize_profile(
 	end
 
 	ensure_machine_count(profile)
+	normalize_master_tube_state(profile)
 	profile.persistent = persistent
 	return profile
 end
@@ -578,22 +673,6 @@ local function set_plot_upgrade_level(
 	end
 end
 
---[[
-	Counts safely stored Masters in the profile.
-
-	Args:
-		profile (Profile): Player Soul profile.
-
-	Returns:
-		number: Number of stored Masters.
-]]
-local function count_masters(profile: Profile): number
-	local count = 0
-	for _ in pairs(profile.masters) do
-		count += 1
-	end
-	return count
-end
 
 --[[
 	Copies the facility-level map for persistence or client snapshots.
@@ -690,7 +769,7 @@ end
 --[[
 	Returns unit templates the player genuinely owns.
 
-	Stored units, Masters and assigned cloning templates all count as owned.
+	Reserve units and the Master Clone Tube template both count as owned.
 
 	Args:
 		profile (Profile): Player Soul profile.
@@ -982,21 +1061,6 @@ local function find_unit_index(
 	return nil
 end
 
-local function is_master_assigned_elsewhere(
-	profile: Profile,
-	master_id: string,
-	excluded_machine_id: string?
-): boolean
-	for _, machine in ipairs(profile.machines) do
-		if machine.machine_id ~= excluded_machine_id
-			and machine.master_id == master_id
-		then
-			return true
-		end
-	end
-	return false
-end
-
 local function process_machine(
 	profile: Profile,
 	machine: MachineState,
@@ -1166,7 +1230,10 @@ local function machine_client_snapshot(
 	local master = if machine.master_id
 		then profile.masters[machine.master_id]
 		else nil
-	local record = master or machine.master_snapshot
+	local record = if machine.output_count > 0
+		and machine.master_snapshot
+		then machine.master_snapshot
+		else master or machine.master_snapshot
 
 	local clone_cost = nil
 	local clone_seconds = nil
@@ -1213,7 +1280,7 @@ local function machine_client_snapshot(
 end
 
 --[[
-	Builds Soul Crucible options for stored non-Master units.
+	Builds Soul Crucible options from Reserve Crypt units.
 
 	Args:
 		profile (Profile): Player Soul profile.
@@ -1226,19 +1293,17 @@ local function build_sacrifice_options(
 ): { any }
 	local options = {}
 	for _, record in ipairs(profile.units) do
-		if not record.deployed_master_id then
-			table.insert(options, {
-				recordId = record.record_id,
-				templateName = record.template_name,
-				sizeTier = record.size_tier,
-				trait = record.trait,
-				evolutionId = record.evolution_id,
-				value = get_sacrifice_value(
-					profile,
-					record
-				),
-			})
-		end
+		table.insert(options, {
+			recordId = record.record_id,
+			templateName = record.template_name,
+			sizeTier = record.size_tier,
+			trait = record.trait,
+			evolutionId = record.evolution_id,
+			value = get_sacrifice_value(
+				profile,
+				record
+			),
+		})
 	end
 	return options
 end
@@ -1308,7 +1373,9 @@ local function build_client_snapshot(
 		ownedTemplates = owned_template_names(profile),
 		progression = copy_progression(profile.progression),
 		units = copy_records(profile.units),
-		masters = masters_as_array(profile),
+		masterTube = copy_record(
+			get_master_tube_record(profile)
+		),
 		machines = machines,
 	}
 end
@@ -1340,9 +1407,9 @@ local function update_player_attributes(
 		profile,
 		"SoulCrucible"
 	)
-	local master_level = get_plot_upgrade_level(
+	local reserve_level = get_plot_upgrade_level(
 		profile,
-		"MasterGallery"
+		"ReserveCrypt"
 	)
 	local trophy_level = get_plot_upgrade_level(
 		profile,
@@ -1362,7 +1429,7 @@ local function update_player_attributes(
 	player:SetAttribute("SkillReliquaryLevel", skill_level)
 	player:SetAttribute("CodexLevel", codex_level)
 	player:SetAttribute("SoulCrucibleLevel", crucible_level)
-	player:SetAttribute("MasterGalleryLevel", master_level)
+	player:SetAttribute("ReserveCryptLevel", reserve_level)
 	player:SetAttribute("TrophyHallLevel", trophy_level)
 	player:SetAttribute("UpgradeForgeLevel", forge_level)
 	player:SetAttribute(
@@ -1388,8 +1455,10 @@ local function update_player_attributes(
 		sacrifice_multiplier
 	)
 	player:SetAttribute(
-		"MasterStorageCapacity",
-		PlotUpgradeConfig.get_master_capacity(master_level)
+		"ReserveDisplaySlots",
+		PlotUpgradeConfig.get_reserve_display_slots(
+			reserve_level
+		)
 	)
 	player:SetAttribute(
 		"BossTrophySlots",
@@ -1529,7 +1598,7 @@ local function require_safe_zone(
 		return nil, "Soul profile is still loading."
 	end
 	if not is_player_in_safe_zone(player) then
-		return nil, "Soul Foundry is only available in the Sanctum."
+		return nil, "Sanctum management is only available at your base."
 	end
 	return profile, nil
 end
@@ -1552,7 +1621,38 @@ local function remove_unit_at(
 	return table.remove(profile.units, index)
 end
 
-local function imprint_master(
+--[[
+	Returns whether any clone tube has completed output waiting.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		boolean: True when changing the Master Tube would be unsafe.
+]]
+local function has_pending_clone_output(profile: Profile): boolean
+	for _, machine in ipairs(profile.machines) do
+		if machine.output_count > 0 then
+			return true
+		end
+	end
+	return false
+end
+
+--[[
+	Places one Reserve Crypt unit into the shared Master Clone Tube.
+
+	The selected unit leaves reserve storage while it is in the tube. Every
+	unlocked clone tube then uses that exact unit as its template.
+
+	Args:
+		player (Player): Player using the Soul Foundry.
+		record_id (string): Reserve unit to place in the Master Tube.
+
+	Returns:
+		boolean, string: Success state and player-facing message.
+]]
+local function put_master_tube(
 	player: Player,
 	record_id: string
 ): (boolean, string)
@@ -1560,35 +1660,109 @@ local function imprint_master(
 	if not profile then
 		return false, err or "Profile unavailable."
 	end
+	if not plot_service
+		or not plot_service.is_player_near_station
+		or not plot_service.is_player_near_station(
+			player,
+			"SoulFoundry",
+			30
+		)
+	then
+		return false, "Use your Soul Foundry Master Clone Tube."
+	end
+
+	process_profile(profile, now_seconds())
+	if has_pending_clone_output(profile) then
+		return false, "Collect finished clones before changing the Master Tube."
+	end
 
 	local index = find_unit_index(profile, record_id)
 	if not index then
-		return false, "Unit is not in your Soul Vault."
+		return false, "Unit is not stored in your Reserve Crypt."
 	end
 
-	local record = profile.units[index]
-	if record.deployed_master_id then
-		return false, "That Master is already marked for deployment."
+	local current = get_master_tube_record(profile)
+	if current then
+		current.acquisition_kind = "Reserve"
+		current.deployed_master_id = nil
+		table.insert(profile.units, current)
 	end
 
-	local gallery_level = get_plot_upgrade_level(
-		profile,
-		"MasterGallery"
-	)
-	local capacity = PlotUpgradeConfig.get_master_capacity(
-		gallery_level
-	)
-	if count_masters(profile) >= capacity then
-		return false, (
-			"Master Gallery is full (%d/%d). Upgrade it first."
-		):format(count_masters(profile), capacity)
+	local record = remove_unit_at(profile, index)
+	record.deployed_master_id = nil
+	record.acquisition_kind = "MasterTube"
+	profile.masters = {
+		[record.record_id] = record,
+	}
+
+	local now = now_seconds()
+	for _, machine in ipairs(profile.machines) do
+		machine.master_id = record.record_id
+		machine.master_snapshot = copy_record(record)
+		machine.output_count = 0
+		machine.last_processed_at = now
+		machine.paused = false
 	end
 
-	record = remove_unit_at(profile, index)
-	record.acquisition_kind = "Master"
-	profile.masters[record.record_id] = record
 	mark_changed(player, profile, true)
-	return true, "Soul Imprint registered as a Master."
+	return true, "Unit placed in the Master Clone Tube."
+end
+
+--[[
+	Returns the Master Clone Tube unit to Reserve Crypt storage.
+
+	Completed clones must be collected first so no output changes identity.
+
+	Args:
+		player (Player): Player using the Soul Foundry.
+
+	Returns:
+		boolean, string: Success state and player-facing message.
+]]
+local function remove_master_tube(
+	player: Player
+): (boolean, string)
+	local profile, err = require_safe_zone(player)
+	if not profile then
+		return false, err or "Profile unavailable."
+	end
+	if not plot_service
+		or not plot_service.is_player_near_station
+		or not plot_service.is_player_near_station(
+			player,
+			"SoulFoundry",
+			30
+		)
+	then
+		return false, "Use your Soul Foundry Master Clone Tube."
+	end
+
+	process_profile(profile, now_seconds())
+	if has_pending_clone_output(profile) then
+		return false, "Collect finished clones before removing the Master."
+	end
+
+	local record = get_master_tube_record(profile)
+	if not record then
+		return false, "The Master Clone Tube is already empty."
+	end
+
+	profile.masters = {}
+	record.acquisition_kind = "Reserve"
+	record.deployed_master_id = nil
+	table.insert(profile.units, record)
+
+	local now = now_seconds()
+	for _, machine in ipairs(profile.machines) do
+		machine.master_id = nil
+		machine.master_snapshot = nil
+		machine.output_count = 0
+		machine.last_processed_at = now
+		machine.paused = true
+	end
+
+	mark_changed(player, profile, true)
+	return true, "Master returned to the Reserve Crypt."
 end
 
 local function sacrifice_unit(
@@ -1612,12 +1786,12 @@ local function sacrifice_unit(
 
 	local index = find_unit_index(profile, record_id)
 	if not index then
-		return false, "Unit is not in your Soul Vault."
+		return false, "Unit is not stored in your Reserve Crypt."
 	end
 
 	local record = profile.units[index]
 	if record.deployed_master_id then
-		return false, "An at-risk Master cannot be sacrificed."
+		return false, "A unit in the Master Clone Tube cannot be sacrificed."
 	end
 
 	record = remove_unit_at(profile, index)
@@ -1626,133 +1800,6 @@ local function sacrifice_unit(
 	process_profile(profile, now_seconds())
 	mark_changed(player, profile, true)
 	return true, ("Sacrificed for %d Soul Essence."):format(gained)
-end
-
-local function deploy_master(
-	player: Player,
-	master_id: string
-): (boolean, string)
-	local profile, err = require_safe_zone(player)
-	if not profile then
-		return false, err or "Profile unavailable."
-	end
-
-	local master = profile.masters[master_id]
-	if not master then
-		return false, "Master not found."
-	end
-
-	for _, machine in ipairs(profile.machines) do
-		if machine.master_id == master_id then
-			process_machine(profile, machine, now_seconds())
-			machine.master_id = nil
-			machine.paused = true
-			machine.last_processed_at = now_seconds()
-		end
-	end
-
-	profile.masters[master_id] = nil
-	local deployed = copy_record(master)
-	if not deployed then
-		return false, "Master record is invalid."
-	end
-
-	deployed.deployed_master_id = master_id
-	deployed.acquisition_kind = "MasterAtRisk"
-	table.insert(profile.units, deployed)
-	mark_changed(player, profile, true)
-	return true, "Master moved to the deployable Soul Vault."
-end
-
-local function shelve_master(
-	player: Player,
-	record_id: string
-): (boolean, string)
-	local profile, err = require_safe_zone(player)
-	if not profile then
-		return false, err or "Profile unavailable."
-	end
-
-	local index = find_unit_index(profile, record_id)
-	if not index then
-		return false, "At-risk Master not found."
-	end
-
-	local record = profile.units[index]
-	local master_id = record.deployed_master_id
-	if not master_id then
-		return false, "That unit is not an at-risk Master."
-	end
-
-	record = remove_unit_at(profile, index)
-	record.record_id = master_id
-	record.deployed_master_id = nil
-	record.acquisition_kind = "Master"
-	profile.masters[master_id] = record
-	mark_changed(player, profile, true)
-	return true, "Master returned to Soul Imprint storage."
-end
-
-local function assign_machine(
-	player: Player,
-	machine_id: string,
-	master_id: string
-): (boolean, string)
-	local profile, err = require_safe_zone(player)
-	if not profile then
-		return false, err or "Profile unavailable."
-	end
-
-	local machine = find_machine(profile, machine_id)
-	local master = profile.masters[master_id]
-	if not machine or not master then
-		return false, "Machine or Master not found."
-	end
-	if machine.output_count > 0
-		and machine.master_id ~= master_id
-	then
-		return false, "Collect finished clones before changing Master."
-	end
-	if is_master_assigned_elsewhere(
-		profile,
-		master_id,
-		machine_id
-	) then
-		return false, "That Master is already assigned elsewhere."
-	end
-
-	machine.master_id = master_id
-	machine.master_snapshot = copy_record(master)
-	machine.last_processed_at = now_seconds()
-	machine.paused = false
-	process_machine(profile, machine, now_seconds())
-	mark_changed(player, profile, true)
-	return true, "Master assigned to cloning machine."
-end
-
-local function unassign_machine(
-	player: Player,
-	machine_id: string
-): (boolean, string)
-	local profile, err = require_safe_zone(player)
-	if not profile then
-		return false, err or "Profile unavailable."
-	end
-
-	local machine = find_machine(profile, machine_id)
-	if not machine then
-		return false, "Machine not found."
-	end
-
-	process_machine(profile, machine, now_seconds())
-	machine.master_id = nil
-	machine.paused = true
-	machine.last_processed_at = now_seconds()
-	if machine.output_count <= 0 then
-		machine.master_snapshot = nil
-	end
-	mark_changed(player, profile, true)
-	return true, "Cloning machine unassigned."
 end
 
 local function collect_machine_output(
@@ -1786,12 +1833,21 @@ local function collect_machine_output(
 
 	machine.output_count = 0
 	machine.last_processed_at = now_seconds()
-	machine.paused = machine.master_id == nil
-	if not machine.master_id then
+
+	local current_master = if machine.master_id
+		then profile.masters[machine.master_id]
+		else nil
+	if current_master then
+		machine.master_snapshot = copy_record(current_master)
+		machine.paused = false
+	else
 		machine.master_snapshot = nil
+		machine.paused = true
 	end
 	mark_changed(player, profile, true)
-	return true, ("Collected %d clone(s)."):format(count)
+	return true, (
+		"Collected %d clone(s) into the Reserve Crypt."
+	):format(count)
 end
 
 local function upgrade_machine(
@@ -1934,38 +1990,21 @@ local function handle_remote(
 	local ok = false
 	local message = "Unknown Soul Foundry action."
 
-	if action == "IMPRINT_MASTER" then
-		ok, message = imprint_master(
+	if action == "PUT_MASTER_TUBE"
+		or action == "IMPRINT_MASTER"
+	then
+		ok, message = put_master_tube(
 			player,
 			tostring(payload.recordId or "")
 		)
+	elseif action == "REMOVE_MASTER_TUBE" then
+		ok, message = remove_master_tube(player)
 	elseif action == "SACRIFICE_UNIT"
 		or action == "DISSOLVE_UNIT"
 	then
 		ok, message = sacrifice_unit(
 			player,
 			tostring(payload.recordId or "")
-		)
-	elseif action == "DEPLOY_MASTER" then
-		ok, message = deploy_master(
-			player,
-			tostring(payload.masterId or "")
-		)
-	elseif action == "SHELVE_MASTER" then
-		ok, message = shelve_master(
-			player,
-			tostring(payload.recordId or "")
-		)
-	elseif action == "ASSIGN_MACHINE" then
-		ok, message = assign_machine(
-			player,
-			tostring(payload.machineId or ""),
-			tostring(payload.masterId or "")
-		)
-	elseif action == "UNASSIGN_MACHINE" then
-		ok, message = unassign_machine(
-			player,
-			tostring(payload.machineId or "")
 		)
 	elseif action == "COLLECT_OUTPUT" then
 		ok, message = collect_machine_output(
@@ -2060,11 +2099,9 @@ function SoulCollectionService.append_extracted_units(
 		local record = normalize_record(raw)
 		if record then
 			if record.deployed_master_id then
-				local master_id = record.deployed_master_id
-				record.record_id = master_id
 				record.deployed_master_id = nil
-				record.acquisition_kind = "Master"
-				profile.masters[master_id] = record
+				record.acquisition_kind = "Reserve"
+				table.insert(profile.units, record)
 				added += 1
 			elseif record.acquisition_kind == "StarterLoan" then
 				if profile.starter_secured_count

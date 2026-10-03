@@ -373,7 +373,9 @@ local function handle_raise(player: Player, model: Model)
 			usedCapacity = used,
 			maxCapacity = maximum,
 			message = (
-				"Army full: %d/%d Command. This unit needs %d."
+				"Army full: %d/%d Command. This unit needs %d. "
+				.. "Banish an active unit to make room and Raise again, "
+				.. "or keep your current army."
 			):format(used, maximum, command_cost),
 		})
 		processing[model] = nil

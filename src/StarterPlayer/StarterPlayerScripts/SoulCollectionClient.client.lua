@@ -45,11 +45,11 @@ type SoulSnapshot = {
 	baseLevel: number,
 	baseUpgradeCost: number?,
 	units: { UnitRecord },
-	masters: { UnitRecord },
+	masterTube: UnitRecord?,
 	machines: { MachineSnapshot },
 }
 
-local active_tab = "Vault"
+local active_tab = "Reserve"
 local latest_snapshot: SoulSnapshot? = nil
 
 local function make_corner(instance: Instance, radius: number)
@@ -184,7 +184,7 @@ local function create_gui()
 	tabs_layout.Padding = UDim.new(0, 8)
 	tabs_layout.Parent = tabs
 
-	for _, tab_name in ipairs({ "Vault", "Masters", "Machines" }) do
+	for _, tab_name in ipairs({ "Reserve", "Machines" }) do
 		local button = make_button(tabs, tab_name, 104)
 		button.Name = tab_name .. "Tab"
 	end
@@ -272,9 +272,11 @@ local function make_empty_row(text: string)
 	label.TextColor3 = Color3.fromRGB(160, 150, 172)
 end
 
-local function render_vault(snapshot: SoulSnapshot)
+local function render_reserve(snapshot: SoulSnapshot)
 	if #snapshot.units == 0 then
-		make_empty_row("No secured deployable units in the Soul Vault.")
+		make_empty_row(
+			"No units deliberately stored in the Reserve Crypt."
+		)
 		return
 	end
 
@@ -284,11 +286,9 @@ local function render_vault(snapshot: SoulSnapshot)
 		title.Position = UDim2.fromOffset(12, 8)
 		title.Size = UDim2.new(1, -250, 0, 20)
 
-		local detail = "Individual unit"
-		if record.deployed_master_id then
-			detail = "MASTER AT RISK — deploy or return to safety"
-		elseif record.source_master_id then
-			detail = "Clone / descendant of a Master"
+		local detail = "Reserve unit"
+		if record.source_master_id then
+			detail = "Cloned unit stored in reserve"
 		end
 
 		local detail_label = make_label(row, detail, 11, false)
@@ -296,104 +296,73 @@ local function render_vault(snapshot: SoulSnapshot)
 		detail_label.Size = UDim2.new(1, -250, 0, 18)
 		detail_label.TextColor3 = Color3.fromRGB(171, 158, 185)
 
-		if record.deployed_master_id then
-			local shelve = make_button(row, "Shelve", 92)
-			shelve.Position = UDim2.new(1, -104, 0, 21)
-			shelve.MouseButton1Click:Connect(function()
-				send_action("SHELVE_MASTER", {
-					recordId = record.record_id,
-				})
-			end)
-		else
-			local imprint = make_button(row, "Imprint", 92)
-			imprint.Position = UDim2.new(1, -104, 0, 21)
-			imprint.MouseButton1Click:Connect(function()
-				send_action("IMPRINT_MASTER", {
-					recordId = record.record_id,
-				})
-			end)
-		end
-	end
-end
-
-local function render_master_machine_buttons(
-	row: Frame,
-	record: UnitRecord,
-	machines: { MachineSnapshot }
-)
-	local x_offset = 204
-	for index, machine in ipairs(machines) do
-		local label = ("M%d"):format(index)
-		local button = make_button(row, label, 44)
-		button.Position = UDim2.new(1, -x_offset, 0, 42)
-		x_offset -= 50
-		button.MouseButton1Click:Connect(function()
-			send_action("ASSIGN_MACHINE", {
-				machineId = machine.machineId,
-				masterId = record.record_id,
+		local master = make_button(row, "Use as Master", 112)
+		master.Position = UDim2.new(1, -124, 0, 21)
+		master.MouseButton1Click:Connect(function()
+			send_action("PUT_MASTER_TUBE", {
+				recordId = record.record_id,
 			})
 		end)
 	end
 end
 
-local function render_masters(snapshot: SoulSnapshot)
-	if #snapshot.masters == 0 then
-		make_empty_row(
-			"No Masters yet. Imprint an extracted unit from the Vault."
-		)
-		return
-	end
+--[[
+	Renders the one unit currently occupying the Master Clone Tube.
 
-	for _, record in ipairs(snapshot.masters) do
-		local row = make_row(88)
-		local title = make_label(
-			row,
-			"MASTER: " .. unit_name(record),
-			14,
-			true
-		)
-		title.Position = UDim2.fromOffset(12, 8)
-		title.Size = UDim2.new(1, -220, 0, 20)
+	Args:
+		snapshot (SoulSnapshot): Current Soul Collection state.
 
-		local abilities = #(record.ability_ids or {})
-		local detail = (
-			"Trait: %s | Size: %s | Evolution: %s | Abilities: %d"
-		):format(
-			record.trait or "None",
-			record.size_tier or "Normal",
-			record.evolution_id or "None",
-			abilities
-		)
-		local detail_label = make_label(row, detail, 11, false)
-		detail_label.Position = UDim2.fromOffset(12, 30)
-		detail_label.Size = UDim2.new(1, -220, 0, 18)
-		detail_label.TextColor3 = Color3.fromRGB(171, 158, 185)
+	Returns:
+		None.
+]]
+local function render_master_tube(snapshot: SoulSnapshot)
+	local row = make_row(82)
+	local record = snapshot.masterTube
+	local name = if record
+		then unit_name(record)
+		else "Empty"
 
-		local risk = make_button(row, "Risk Master", 110)
-		risk.Position = UDim2.new(1, -122, 0, 14)
-		risk.MouseButton1Click:Connect(function()
-			send_action("DEPLOY_MASTER", {
-				masterId = record.record_id,
-			})
+	local title = make_label(
+		row,
+		"MASTER CLONE TUBE: " .. name,
+		14,
+		true
+	)
+	title.Position = UDim2.fromOffset(12, 8)
+	title.Size = UDim2.new(1, -150, 0, 20)
+
+	local detail = make_label(
+		row,
+		(
+			"All unlocked Clone Tubes copy this one unit. "
+			.. "The original remains protected in the Master Tube."
+		),
+		11,
+		false
+	)
+	detail.Position = UDim2.fromOffset(12, 34)
+	detail.Size = UDim2.new(1, -150, 0, 36)
+	detail.TextWrapped = true
+	detail.TextColor3 = Color3.fromRGB(171, 158, 185)
+
+	if record then
+		local remove = make_button(row, "Return", 92)
+		remove.Position = UDim2.new(1, -104, 0, 22)
+		remove.MouseButton1Click:Connect(function()
+			send_action("REMOVE_MASTER_TUBE")
 		end)
-
-		render_master_machine_buttons(
-			row,
-			record,
-			snapshot.machines
-		)
 	end
 end
 
 local function machine_status(machine: MachineSnapshot): string
 	if not machine.master then
-		return "Idle — assign a Master"
+		return "Idle — place a unit in the Master Clone Tube"
 	end
 	if machine.paused then
 		if machine.outputCount >= machine.capacity then
 			return "Paused — output storage full"
 		end
-		return "Paused — needs Soul Essence or assignment"
+		return "Paused — needs Soul Essence or a Master Tube unit"
 	end
 	if machine.secondsRemaining then
 		return ("Cloning — ~%ds remaining"):format(
@@ -408,17 +377,9 @@ local function render_machine_buttons(
 	machine: MachineSnapshot
 )
 	local collect = make_button(row, "Collect", 82)
-	collect.Position = UDim2.new(1, -270, 0, 57)
+	collect.Position = UDim2.new(1, -180, 0, 57)
 	collect.MouseButton1Click:Connect(function()
 		send_action("COLLECT_OUTPUT", {
-			machineId = machine.machineId,
-		})
-	end)
-
-	local unassign = make_button(row, "Unassign", 82)
-	unassign.Position = UDim2.new(1, -180, 0, 57)
-	unassign.MouseButton1Click:Connect(function()
-		send_action("UNASSIGN_MACHINE", {
 			machineId = machine.machineId,
 		})
 	end)
@@ -435,11 +396,12 @@ local function render_machine_buttons(
 end
 
 local function render_machines(snapshot: SoulSnapshot)
+	render_master_tube(snapshot)
 	for index, machine in ipairs(snapshot.machines) do
 		local row = make_row(100)
 		local title = make_label(
 			row,
-			("Machine %d — Level %d"):format(
+			("Clone Tube %d — Level %d"):format(
 				index,
 				machine.level
 			),
@@ -454,7 +416,7 @@ local function render_machines(snapshot: SoulSnapshot)
 			else "None"
 		local line = make_label(
 			row,
-			("Master: %s | Output: %d/%d"):format(
+			("Template: %s | Output: %d/%d"):format(
 				master_name,
 				machine.outputCount,
 				machine.capacity
@@ -482,7 +444,7 @@ end
 local function render_snapshot(snapshot: SoulSnapshot)
 	latest_snapshot = snapshot
 	summary.Text = (
-		"Soul Essence: %d   |   Foundry Lv %d   |   Machines: %d"
+		"Soul Essence: %d   |   Foundry Lv %d   |   Clone Tubes: %d"
 	):format(
 		snapshot.soulEssence,
 		snapshot.baseLevel,
@@ -502,18 +464,15 @@ local function render_snapshot(snapshot: SoulSnapshot)
 		else "Foundry Max Level"
 
 	clear_content()
-	if active_tab == "Vault" then
-		render_vault(snapshot)
-	elseif active_tab == "Masters" then
-		render_masters(snapshot)
+	if active_tab == "Reserve" then
+		render_reserve(snapshot)
 	else
 		render_machines(snapshot)
 	end
 end
 
 local function set_tab(tab_name: string)
-	if tab_name ~= "Vault"
-		and tab_name ~= "Masters"
+	if tab_name ~= "Reserve"
 		and tab_name ~= "Machines"
 	then
 		return
@@ -523,12 +482,10 @@ local function set_tab(tab_name: string)
 
 	local title = panel:FindFirstChild("Title")
 	if title and title:IsA("TextLabel") then
-		if tab_name == "Masters" then
-			title.Text = "Master Archive"
-		elseif tab_name == "Machines" then
-			title.Text = "Soul Foundry"
+		if tab_name == "Reserve" then
+			title.Text = "Reserve Crypt"
 		else
-			title.Text = "Soul Vault"
+			title.Text = "Soul Foundry"
 		end
 	end
 
@@ -544,7 +501,7 @@ panel:GetAttributeChangedSignal("RequestedTab"):Connect(function()
 	end
 end)
 
-for _, tab_name in ipairs({ "Vault", "Masters", "Machines" }) do
+for _, tab_name in ipairs({ "Reserve", "Machines" }) do
 	local button = tabs:FindFirstChild(
 		tab_name .. "Tab"
 	)

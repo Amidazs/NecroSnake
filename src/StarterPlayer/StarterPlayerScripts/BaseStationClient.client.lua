@@ -196,7 +196,7 @@ end
 	Builds a readable name for a persistent unit record.
 
 	Args:
-		record (any): Soul Vault or Master record.
+		record (any): Reserve, Master Tube, or trophy record.
 
 	Returns:
 		string: Display name including evolution state.
@@ -296,6 +296,7 @@ end
 		records ({ any }): Records to display.
 		empty_text (string): Text for unused slots.
 		color (Color3): Label colour.
+		max_slots (number?): Optional number of visible labelled slots.
 
 	Returns:
 		None.
@@ -304,9 +305,20 @@ local function render_record_plinths(
 	attribute_name: string,
 	records: { any },
 	empty_text: string,
-	color: Color3
+	color: Color3,
+	max_slots: number?
 )
 	for index, plinth in ipairs(get_plinths(attribute_name)) do
+		if max_slots and index > max_slots then
+			local old = plinth:FindFirstChild(
+				PERSONAL_LABEL_NAME
+			)
+			if old then
+				old:Destroy()
+			end
+			continue
+		end
+
 		local record = records[index]
 		local text = if record
 			then record_name(record)
@@ -316,7 +328,7 @@ local function render_record_plinths(
 end
 
 --[[
-	Collects captured boss identities from Vault and Master records.
+	Collects captured boss identities from reserve and the Master Tube.
 
 	Args:
 		snapshot (any): Soul Collection snapshot.
@@ -327,13 +339,20 @@ end
 local function get_boss_records(snapshot: any): { any }
 	local result = {}
 	local found: { [string]: boolean } = {}
-	for _, collection_name in ipairs({ "units", "masters" }) do
-		for _, record in ipairs(snapshot[collection_name] or {}) do
-			local template = tostring(record.template_name or "")
-			if BOSS_TEMPLATES[template] and not found[template] then
-				found[template] = true
-				table.insert(result, record)
-			end
+	for _, record in ipairs(snapshot.units or {}) do
+		local template = tostring(record.template_name or "")
+		if BOSS_TEMPLATES[template] and not found[template] then
+			found[template] = true
+			table.insert(result, record)
+		end
+	end
+
+	local master = snapshot.masterTube
+	if typeof(master) == "table" then
+		local template = tostring(master.template_name or "")
+		if BOSS_TEMPLATES[template] and not found[template] then
+			found[template] = true
+			table.insert(result, master)
 		end
 	end
 	return result
@@ -398,14 +417,23 @@ local function render_machines(snapshot: any)
 		end
 
 		local machine = machines[index]
-		local text = ("Machine %d"):format(index)
-		if machine then
-			text = ("Machine %d | Lv %d\n%d clone(s) ready"):format(
-				index,
-				tonumber(machine.level) or 1,
-				tonumber(machine.outputCount) or 0
+		if not machine then
+			local old = instance:FindFirstChild(
+				PERSONAL_LABEL_NAME
 			)
+			if old then
+				old:Destroy()
+			end
+			continue
 		end
+
+		local text = (
+			"Clone Tube %d | Lv %d\n%d clone(s) ready"
+		):format(
+			index,
+			tonumber(machine.level) or 1,
+			tonumber(machine.outputCount) or 0
+		)
 		set_plinth_label(
 			instance,
 			text,
@@ -424,11 +452,15 @@ end
 		None.
 ]]
 local function render_base_snapshot(snapshot: any)
+	local reserve_slots = tonumber(
+		player:GetAttribute("ReserveDisplaySlots")
+	) or 6
 	render_record_plinths(
-		"MasterDisplaySlot",
-		snapshot.masters or {},
-		"Empty Master Slot",
-		Color3.fromRGB(205, 166, 235)
+		"ReserveDisplaySlot",
+		snapshot.units or {},
+		"Empty Reserve Alcove",
+		Color3.fromRGB(190, 172, 205),
+		reserve_slots
 	)
 
 	local roster_records = {}
@@ -1213,7 +1245,7 @@ end
 	Opens the Soul Foundry interface.
 
 	Args:
-		tab_name (string): "Machines" or "Masters" context.
+		tab_name (string): "Machines" or "Reserve" context.
 
 	Returns:
 		None.
@@ -1311,8 +1343,8 @@ local function activate_station(station_id: string)
 		return
 	end
 
-	if station_id == "Masters" then
-		open_soul_foundry("Masters")
+	if station_id == "ReserveCrypt" then
+		open_soul_foundry("Reserve")
 		return
 	end
 

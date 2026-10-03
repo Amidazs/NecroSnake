@@ -23,7 +23,7 @@ local UPGRADE_ATTRIBUTES = {
 	"SkillReliquaryLevel",
 	"CodexLevel",
 	"SoulCrucibleLevel",
-	"MasterGalleryLevel",
+	"ReserveCryptLevel",
 	"TrophyHallLevel",
 	"UpgradeForgeLevel",
 }
@@ -385,6 +385,15 @@ local function apply_player_progression(
 		foundry_level = 1
 	end
 
+	local reserve_level = plot:GetAttribute("ReserveCryptLevel")
+	if typeof(reserve_level) ~= "number" then
+		reserve_level = 1
+	end
+	local reserve_slots =
+		PlotUpgradeConfig.get_reserve_display_slots(
+			reserve_level
+		)
+
 	local trophy_level = plot:GetAttribute("TrophyHallLevel")
 	if typeof(trophy_level) ~= "number" then
 		trophy_level = 1
@@ -417,6 +426,26 @@ local function apply_player_progression(
 				)
 				instance.CanCollide = unlocked
 					and base_collision == true
+			end
+
+			local reserve_index =
+				instance:GetAttribute("ReserveDisplaySlot")
+			if typeof(reserve_index) == "number" then
+				local unlocked = reserve_index <= reserve_slots
+				instance.Transparency = if unlocked
+					then 0
+					else 0.82
+				instance.CanCollide = unlocked
+			end
+
+			local clone_label_index =
+				instance:GetAttribute("CloneTubeLabelIndex")
+			if typeof(clone_label_index) == "number" then
+				local gui = instance:FindFirstChild("Label")
+				if gui and gui:IsA("BillboardGui") then
+					gui.Enabled =
+						clone_label_index <= foundry_level
+				end
 			end
 
 			local trophy_index =
@@ -643,24 +672,24 @@ local function render_record_model(
 end
 
 --[[
-	Renders the player's Master Archive models.
+	Renders stored Reserve Crypt units on physical alcoves.
 
 	Args:
 		plot (Model): Assigned plot.
-		masters ({ any }): Stored Master records.
+		units ({ any }): Deliberately stored reserve-unit records.
 
 	Returns:
 		None.
 ]]
-local function render_master_archive(
+local function render_reserve_crypt(
 	plot: Model,
-	masters: { any }
+	units: { any }
 )
 	local plinths: { BasePart } = {}
 	for _, instance in ipairs(plot:GetDescendants()) do
 		if instance:IsA("BasePart")
 			and typeof(
-				instance:GetAttribute("MasterDisplaySlot")
+				instance:GetAttribute("ReserveDisplaySlot")
 			) == "number"
 		then
 			table.insert(plinths, instance)
@@ -668,15 +697,28 @@ local function render_master_archive(
 	end
 
 	table.sort(plinths, function(left, right)
-		return (left:GetAttribute("MasterDisplaySlot") :: number)
-			< (right:GetAttribute("MasterDisplaySlot") :: number)
+		return (
+			left:GetAttribute("ReserveDisplaySlot") :: number
+		) < (
+			right:GetAttribute("ReserveDisplaySlot") :: number
+		)
 	end)
 
+	local reserve_level = tonumber(
+		plot:GetAttribute("ReserveCryptLevel")
+	) or 1
+	local visible_slots =
+		PlotUpgradeConfig.get_reserve_display_slots(
+			reserve_level
+		)
+
 	for index, plinth in ipairs(plinths) do
-		local record = masters[index]
+		local record = if index <= visible_slots
+			then units[index]
+			else nil
 		render_record_model(
 			plinth,
-			"ArchiveDisplay",
+			"ReserveDisplay",
 			record,
 			plinth.CFrame * CFrame.new(0, 4.2, 0),
 			0.55,
@@ -739,21 +781,35 @@ local function render_war_room_roster(
 end
 
 --[[
-	Renders Master and in-progress clone models inside cloning chambers.
+	Renders the shared Master Tube and each in-progress clone.
 
 	Args:
 		plot (Model): Assigned plot.
-		machines ({ any }): Cloning-machine snapshots.
+		master_tube (any): Unit currently in the Master Clone Tube.
+		machines ({ any }): Clone-tube snapshots.
 
 	Returns:
 		None.
 ]]
 local function render_clone_chambers(
 	plot: Model,
+	master_tube: any,
 	machines: { any }
 )
 	for _, instance in ipairs(plot:GetDescendants()) do
 		if not instance:IsA("BasePart") then
+			continue
+		end
+
+		if instance:GetAttribute("MasterTubeAnchor") == true then
+			render_record_model(
+				instance,
+				"MasterTubeDisplay",
+				master_tube,
+				instance.CFrame * CFrame.new(0, -6, 0),
+				0.44,
+				0.18
+			)
 			continue
 		end
 
@@ -764,25 +820,11 @@ local function render_clone_chambers(
 
 		local machine = machines[index]
 		if typeof(machine) ~= "table" then
-			clear_display(instance, "CloneMasterDisplay")
 			clear_display(instance, "CloneGrowthDisplay")
 			continue
 		end
 
 		local record = machine.master
-		local master_record = if machine.masterId
-			then record
-			else nil
-		render_record_model(
-			instance,
-			"CloneMasterDisplay",
-			master_record,
-			instance.CFrame
-				* CFrame.new(-4.5, -6, 0),
-			0.42,
-			0.20
-		)
-
 		local progress = tonumber(machine.cloneProgress) or 0
 		if (tonumber(machine.outputCount) or 0) > 0 then
 			progress = 1
@@ -795,8 +837,7 @@ local function render_clone_chambers(
 			instance,
 			"CloneGrowthDisplay",
 			record,
-			instance.CFrame
-				* CFrame.new(4.5, -6, 0),
+			instance.CFrame * CFrame.new(0, -6, 0),
 			clone_scale,
 			clone_alpha
 		)
@@ -815,9 +856,9 @@ end
 local function clear_collection_displays(plot: Model)
 	for _, instance in ipairs(plot:GetDescendants()) do
 		if instance:IsA("BasePart") then
-			clear_display(instance, "ArchiveDisplay")
+			clear_display(instance, "ReserveDisplay")
 			clear_display(instance, "RosterDisplay")
-			clear_display(instance, "CloneMasterDisplay")
+			clear_display(instance, "MasterTubeDisplay")
 			clear_display(instance, "CloneGrowthDisplay")
 		end
 	end
@@ -881,6 +922,27 @@ local function clear_plot(plot: Model)
 				)
 				instance.CanCollide = unlocked
 					and base_collision == true
+			end
+
+			local reserve_index =
+				instance:GetAttribute("ReserveDisplaySlot")
+			if typeof(reserve_index) == "number" then
+				local default_slots =
+					PlotUpgradeConfig.get_reserve_display_slots(1)
+				local unlocked = reserve_index <= default_slots
+				instance.Transparency = if unlocked
+					then 0
+					else 0.82
+				instance.CanCollide = unlocked
+			end
+
+			local clone_label_index =
+				instance:GetAttribute("CloneTubeLabelIndex")
+			if typeof(clone_label_index) == "number" then
+				local gui = instance:FindFirstChild("Label")
+				if gui and gui:IsA("BillboardGui") then
+					gui.Enabled = clone_label_index <= 1
+				end
 			end
 
 			local trophy_index =
@@ -1095,7 +1157,7 @@ end
 		CFrame?: Plot spawn transform.
 ]]
 --[[
-	Refreshes physical Master Archive and cloning-chamber models.
+	Refreshes physical Reserve Crypt and cloning-chamber models.
 
 	Args:
 		player (Player): Plot owner.
@@ -1113,9 +1175,9 @@ function PlotService.refresh_collection_visuals(
 		return false
 	end
 
-	render_master_archive(
+	render_reserve_crypt(
 		plot,
-		snapshot.masters or {}
+		snapshot.units or {}
 	)
 	render_war_room_roster(
 		plot,
@@ -1123,6 +1185,7 @@ function PlotService.refresh_collection_visuals(
 	)
 	render_clone_chambers(
 		plot,
+		snapshot.masterTube,
 		snapshot.machines or {}
 	)
 	return true
