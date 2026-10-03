@@ -21,6 +21,17 @@ local COLORS = {
 	gold = Color3.fromRGB(188, 145, 72),
 }
 
+local FACILITY_PURPOSE: { [string]: string } = {
+	SoulFoundry = "CLONE STORED MASTERS",
+	FormationEditor = "EDIT ARMY FORMATIONS",
+	SkillLoadout = "EQUIP & LEARN SKILLS",
+	Codex = "RAISE UNITS • UNLOCK BONUSES",
+	SoulCrucible = "SACRIFICE UNITS FOR ESSENCE",
+	Masters = "VIEW & SELECT MASTER TEMPLATES",
+	Trophies = "DISPLAY DEFEATED BOSSES",
+	Upgrades = "UPGRADE YOUR SANCTUM",
+}
+
 export type RegionSpec = {
 	id: string,
 	display_name: string,
@@ -976,7 +987,305 @@ local function add_station_prompt(
 end
 
 --[[
-	Creates a compact station inside one player plot.
+	Adds the War Room's physical command-table identity.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_war_room_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	local table_part = make_part(
+		parent,
+		"WarTable",
+		Vector3.new(18, 3, 12),
+		station_cf * CFrame.new(0, 2.5, 4),
+		Color3.fromRGB(58, 52, 48),
+		Enum.Material.WoodPlanks,
+		true
+	)
+	make_part(
+		parent,
+		"WarMap",
+		Vector3.new(15, 0.25, 9),
+		table_part.CFrame * CFrame.new(0, 1.65, 0),
+		color,
+		Enum.Material.Neon,
+		false,
+		0.28
+	)
+end
+
+--[[
+	Adds the Reliquary's paired rune-pedestal identity.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_reliquary_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	for _, x in ipairs({ -8, 8 }) do
+		local pillar = make_part(
+			parent,
+			"ReliquaryPillar",
+			Vector3.new(6, 9, 6),
+			station_cf * CFrame.new(x, 4.5, 5),
+			Color3.fromRGB(77, 65, 60),
+			Enum.Material.Slate,
+			true
+		)
+		make_part(
+			parent,
+			"RuneTome",
+			Vector3.new(7, 0.7, 5),
+			pillar.CFrame * CFrame.new(0, 4.85, 0),
+			color,
+			Enum.Material.Neon,
+			false,
+			0.18
+		)
+	end
+end
+
+--[[
+	Adds the Codex's reading desk and archive shelf.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_codex_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	make_part(
+		parent,
+		"CodexShelf",
+		Vector3.new(24, 13, 3),
+		station_cf * CFrame.new(0, 6.5, 9),
+		Color3.fromRGB(52, 57, 66),
+		Enum.Material.WoodPlanks,
+		true
+	)
+	local desk = make_part(
+		parent,
+		"CodexDesk",
+		Vector3.new(12, 4, 7),
+		station_cf * CFrame.new(0, 2, 1),
+		Color3.fromRGB(66, 59, 55),
+		Enum.Material.WoodPlanks,
+		true
+	)
+	make_part(
+		parent,
+		"OpenCodex",
+		Vector3.new(8, 0.45, 5),
+		desk.CFrame * CFrame.new(0, 2.25, 0),
+		color,
+		Enum.Material.Neon,
+		false,
+		0.25
+	)
+end
+
+--[[
+	Adds the Soul Crucible's ritual basin.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_crucible_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	local position = station_cf.Position
+	make_disc(
+		parent,
+		"CrucibleBasin",
+		position + Vector3.new(0, 3.2, 0),
+		18,
+		Color3.fromRGB(55, 42, 45),
+		Enum.Material.Slate
+	)
+	local core = make_disc(
+		parent,
+		"CrucibleCore",
+		position + Vector3.new(0, 4.1, 0),
+		11,
+		color,
+		Enum.Material.Neon
+	)
+	core.CanCollide = false
+end
+
+--[[
+	Adds the Archive's rear gallery arch.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_archive_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	make_part(
+		parent,
+		"ArchiveHeader",
+		Vector3.new(32, 4, 4),
+		station_cf * CFrame.new(0, 15, 18),
+		color:Lerp(Color3.fromRGB(45, 40, 49), 0.5),
+		Enum.Material.Marble,
+		true
+	)
+end
+
+--[[
+	Adds the Trophy Hall's paired victory standards.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_trophy_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	for _, x in ipairs({ -17, 17 }) do
+		make_part(
+			parent,
+			"TrophyStandard",
+			Vector3.new(4, 20, 4),
+			station_cf * CFrame.new(x, 10, 15),
+			color,
+			Enum.Material.Metal,
+			true
+		)
+	end
+end
+
+--[[
+	Adds the Upgrade Forge's hearth and anvil silhouette.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_forge_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	color: Color3
+)
+	local hearth = make_part(
+		parent,
+		"ForgeHearth",
+		Vector3.new(14, 8, 8),
+		station_cf * CFrame.new(0, 4, 7),
+		Color3.fromRGB(67, 55, 49),
+		Enum.Material.Slate,
+		true
+	)
+	make_part(
+		parent,
+		"ForgeFire",
+		Vector3.new(9, 4, 1),
+		hearth.CFrame * CFrame.new(0, 0, -4.4),
+		color,
+		Enum.Material.Neon,
+		false,
+		0.08
+	)
+	make_part(
+		parent,
+		"ForgeAnvil",
+		Vector3.new(9, 4, 5),
+		station_cf * CFrame.new(0, 2, -1),
+		Color3.fromRGB(62, 60, 64),
+		Enum.Material.Metal,
+		true
+	)
+end
+
+--[[
+	Adds props that make a facility readable before its UI is opened.
+
+	Args:
+		parent (Instance): Station model receiving the props.
+		station_cf (CFrame): Station transform.
+		station_id (string): Functional station identifier.
+		color (Color3): Station accent colour.
+
+	Returns:
+		None.
+]]
+local function add_station_identity(
+	parent: Instance,
+	station_cf: CFrame,
+	station_id: string,
+	color: Color3
+)
+	if station_id == "FormationEditor" then
+		add_war_room_identity(parent, station_cf, color)
+	elseif station_id == "SkillLoadout" then
+		add_reliquary_identity(parent, station_cf, color)
+	elseif station_id == "Codex" then
+		add_codex_identity(parent, station_cf, color)
+	elseif station_id == "SoulCrucible" then
+		add_crucible_identity(parent, station_cf, color)
+	elseif station_id == "Masters" then
+		add_archive_identity(parent, station_cf, color)
+	elseif station_id == "Trophies" then
+		add_trophy_identity(parent, station_cf, color)
+	elseif station_id == "Upgrades" then
+		add_forge_identity(parent, station_cf, color)
+	end
+end
+
+--[[
+	Creates an open-front, purpose-labelled facility.
+
+	The front of every plot is local negative Z. Keeping the front open makes
+	each station's unique gameplay prop readable from the natural approach.
 
 	Args:
 		parent (Instance): Plot facilities container.
@@ -986,7 +1295,7 @@ end
 		station_id (string): Client interaction identifier.
 		plot_index (number): Owning plot index.
 		diameter (number): Station floor diameter.
-		upgrade_key (string): Future upgrade identifier.
+		upgrade_key (string): Physical-upgrade identifier.
 
 	Returns:
 		Model: Created station model.
@@ -1006,6 +1315,10 @@ local function make_station(
 	model:SetAttribute("BaseStationId", station_id)
 	model:SetAttribute("PlotIndex", plot_index)
 	model:SetAttribute("PlotUpgradeKey", upgrade_key)
+	model:SetAttribute(
+		"FacilityPurpose",
+		FACILITY_PURPOSE[station_id] or "OPEN FACILITY"
+	)
 	model.Parent = parent
 
 	local position = station_cf.Position
@@ -1014,27 +1327,31 @@ local function make_station(
 		"Floor",
 		position,
 		diameter,
-		color:Lerp(Color3.fromRGB(32, 30, 34), 0.6),
+		color:Lerp(Color3.fromRGB(30, 29, 33), 0.68),
 		Enum.Material.Slate
 	)
+	local inset = make_disc(
+		model,
+		"FloorAccent",
+		position + Vector3.new(0, 0.15, 0),
+		diameter * 0.74,
+		color:Lerp(Color3.fromRGB(28, 27, 31), 0.48),
+		Enum.Material.SmoothPlastic
+	)
+	inset.CanCollide = false
 
 	local frame_color = color:Lerp(
 		Color3.fromRGB(28, 27, 31),
 		0.58
 	)
-	local x_offset = diameter * 0.31
-	local z_offset = diameter * 0.23
-	for _, offset in ipairs({
-		Vector3.new(-x_offset, 11, -z_offset),
-		Vector3.new(x_offset, 11, -z_offset),
-		Vector3.new(-x_offset, 11, z_offset),
-		Vector3.new(x_offset, 11, z_offset),
-	}) do
+	local x_offset = diameter * 0.32
+	local rear_z = diameter * 0.22
+	for _, x in ipairs({ -x_offset, x_offset }) do
 		make_part(
 			model,
-			"StationColumn",
-			Vector3.new(4, 22, 4),
-			station_cf * CFrame.new(offset),
+			"RearColumn",
+			Vector3.new(4, 20, 4),
+			station_cf * CFrame.new(x, 10, rear_z),
 			frame_color,
 			Enum.Material.Slate,
 			true
@@ -1047,38 +1364,67 @@ local function make_station(
 		Vector3.new(
 			diameter * 0.78,
 			2,
-			diameter * 0.58
+			diameter * 0.42
 		),
-		station_cf * CFrame.new(0, 23, 0),
+		station_cf * CFrame.new(0, 21, rear_z * 0.45),
 		frame_color,
 		Enum.Material.Slate,
 		true
 	)
 
+	add_station_identity(
+		model,
+		station_cf,
+		station_id,
+		color
+	)
+
+	local console_z = -(diameter * 0.32)
 	local pedestal = make_part(
 		model,
 		"InteractionPedestal",
-		Vector3.new(7, 7, 7),
-		station_cf * CFrame.new(0, 4, 0),
-		color,
-		Enum.Material.Neon,
+		Vector3.new(9, 4.5, 5),
+		station_cf * CFrame.new(0, 2.25, console_z),
+		frame_color,
+		Enum.Material.Metal,
 		true
 	)
-	add_station_prompt(
+	local glow = make_part(
+		model,
+		"ConsoleGlow",
+		Vector3.new(7, 0.4, 3),
+		pedestal.CFrame * CFrame.new(0, 2.4, 0),
+		color,
+		Enum.Material.Neon,
+		false,
+		0.08
+	)
+	glow.CanQuery = false
+
+	local prompt = add_station_prompt(
 		pedestal,
 		station_id,
-		"Use",
+		"Open",
 		plot_index,
 		upgrade_key
 	)
+	prompt.ObjectText = name
 
-	make_world_label(
+	local purpose = FACILITY_PURPOSE[station_id] or "OPEN FACILITY"
+	local label_anchor = make_world_label(
 		model,
 		"StationLabel",
-		position + Vector3.new(0, 29, 0),
-		name,
+		(
+			station_cf
+				* CFrame.new(0, 27, -diameter * 0.08)
+		).Position,
+		("%s\n%s"):format(name, purpose),
 		color
 	)
+	local billboard = label_anchor:FindFirstChild("Label")
+	if billboard and billboard:IsA("BillboardGui") then
+		billboard.Size = UDim2.fromOffset(360, 92)
+	end
 	return model
 end
 
@@ -1132,7 +1478,35 @@ local function make_plot_owner_sign(
 end
 
 --[[
-	Creates decorative clone chambers in a plot Soul Foundry.
+	Tags a cloning-machine visual for level-based visibility.
+
+	Args:
+		part (BasePart): Machine geometry to tag.
+		machine_index (number): Foundry machine index.
+
+	Returns:
+		None.
+]]
+local function tag_machine_visual(
+	part: BasePart,
+	machine_index: number
+)
+	part:SetAttribute("MachineVisualIndex", machine_index)
+	part:SetAttribute(
+		"MachineBaseTransparency",
+		part.Transparency
+	)
+	part:SetAttribute(
+		"MachineBaseCanCollide",
+		part.CanCollide
+	)
+end
+
+--[[
+	Creates a paired Master -> Clone display bay.
+
+	Each machine has two separate front-facing tubes so the player can read
+	the cloning process from the plot entrance rather than walking behind it.
 
 	Args:
 		parent (Instance): Soul Foundry station.
@@ -1148,25 +1522,79 @@ local function add_clone_chambers(
 	plot_index: number
 )
 	for index = 1, 3 do
-		local x = (index - 2) * 19
-		local chamber = make_part(
-			parent,
-			("CloneChamber%d"):format(index),
-			Vector3.new(9, 20, 9),
-			station_cf * CFrame.new(x, 11, 16),
-			COLORS.soul,
-			Enum.Material.Glass,
-			true,
-			0.38
+		local machine_x = (index - 2) * 21
+		local machine_cf = station_cf * CFrame.new(
+			machine_x,
+			11,
+			-1
 		)
-		chamber:SetAttribute("MachineIndex", index)
-		chamber:SetAttribute("PlotIndex", plot_index)
+		local anchor = make_part(
+			parent,
+			("CloneMachineAnchor%d"):format(index),
+			Vector3.new(1, 1, 1),
+			machine_cf,
+			COLORS.soul,
+			Enum.Material.SmoothPlastic,
+			false,
+			1
+		)
+		anchor.CanQuery = false
+		anchor:SetAttribute("MachineIndex", index)
+		anchor:SetAttribute("PlotIndex", plot_index)
 
-		local light = Instance.new("PointLight")
-		light.Color = COLORS.soul
-		light.Brightness = 1.5
-		light.Range = 15
-		light.Parent = chamber
+		for _, entry in ipairs({
+			{ name = "Master", x = -4.5 },
+			{ name = "Clone", x = 4.5 },
+		}) do
+			local tube = make_part(
+				parent,
+				("%sTube%d"):format(entry.name, index),
+				Vector3.new(7, 20, 7),
+				machine_cf * CFrame.new(entry.x, 0, 0),
+				COLORS.soul,
+				Enum.Material.Glass,
+				true,
+				0.42
+			)
+			tag_machine_visual(tube, index)
+
+			for _, y in ipairs({ -10.8, 10.8 }) do
+				local cap = make_part(
+					parent,
+					("%sTubeCap%d"):format(
+						entry.name,
+						index
+					),
+					Vector3.new(8.2, 1.6, 8.2),
+					tube.CFrame * CFrame.new(0, y, 0),
+					Color3.fromRGB(63, 55, 72),
+					Enum.Material.Metal,
+					true
+				)
+				tag_machine_visual(cap, index)
+			end
+
+			local light = Instance.new("PointLight")
+			light.Color = COLORS.soul
+			light.Brightness = 1.6
+			light.Range = 13
+			light.Parent = tube
+		end
+
+		local machine_label = make_world_label(
+			parent,
+			("CloneMachineLabel%d"):format(index),
+			(
+				machine_cf
+					* CFrame.new(0, 13.5, 0)
+			).Position,
+			("BAY %d\nMASTER  →  CLONE"):format(index),
+			COLORS.soul
+		)
+		local gui = machine_label:FindFirstChild("Label")
+		if gui and gui:IsA("BillboardGui") then
+			gui.Size = UDim2.fromOffset(190, 52)
+		end
 	end
 end
 
@@ -1276,6 +1704,117 @@ local function add_trophy_plinths(
 end
 
 --[[
+	Removes superseded interior props from the recovered base shell.
+
+	The perimeter walls, gate, towers, banners, torches, and town path remain.
+	Only the old house and fire pit are removed because they overlap the
+	functional Sanctum facilities.
+
+	Args:
+		plot (Model): Plot containing the recovered Decor folder.
+
+	Returns:
+		None.
+]]
+local function clear_legacy_plot_clutter(plot: Model)
+	local decor = plot:FindFirstChild("Decor")
+	if not decor then
+		return
+	end
+
+	for _, child in ipairs(decor:GetChildren()) do
+		local is_house = string.sub(child.Name, 1, 6) == "House_"
+		if child.Name == "FirePit" or is_house then
+			child:Destroy()
+		end
+	end
+end
+
+--[[
+	Adds a low-profile path grid that explains the plot's three rows.
+
+	Args:
+		parent (Instance): Facilities folder receiving path parts.
+		surface_cf (CFrame): Plot surface transform.
+
+	Returns:
+		None.
+]]
+local function add_plot_walkways(
+	parent: Instance,
+	surface_cf: CFrame
+)
+	local path_color = Color3.fromRGB(72, 62, 83)
+	local trim_color = Color3.fromRGB(119, 84, 153)
+
+	make_part(
+		parent,
+		"MainSanctumAisle",
+		Vector3.new(16, 0.35, 186),
+		surface_cf * CFrame.new(0, 0.18, -2),
+		path_color,
+		Enum.Material.Cobblestone,
+		false
+	)
+	for index, z in ipairs({ -58, 10, 76 }) do
+		make_part(
+			parent,
+			("SanctumCrossAisle%d"):format(index),
+			Vector3.new(205, 0.32, 12),
+			surface_cf * CFrame.new(0, 0.16, z),
+			path_color,
+			Enum.Material.Cobblestone,
+			false
+		)
+	end
+	make_part(
+		parent,
+		"MainAisleSoulTrim",
+		Vector3.new(2.5, 0.4, 186),
+		surface_cf * CFrame.new(0, 0.39, -2),
+		trim_color,
+		Enum.Material.Neon,
+		false,
+		0.35
+	)
+end
+
+--[[
+	Adds a concise orientation board near the player's arrival point.
+
+	Args:
+		parent (Instance): Facilities folder receiving the guide.
+		surface_cf (CFrame): Plot surface transform.
+
+	Returns:
+		None.
+]]
+local function add_plot_guide(
+	parent: Instance,
+	surface_cf: CFrame
+)
+	local anchor = make_world_label(
+		parent,
+		"SanctumGuide",
+		(
+			surface_cf
+				* CFrame.new(0, 14, -96)
+		).Position,
+		(
+			"SANCTUM\n"
+			.. "FRONT • COMMAND & SKILLS\n"
+			.. "MIDDLE • STUDY, SACRIFICE & UPGRADES\n"
+			.. "REAR • MASTERS, CLONING & TROPHIES"
+		),
+		COLORS.soul
+	)
+	local gui = anchor:FindFirstChild("Label")
+	if gui and gui:IsA("BillboardGui") then
+		gui.Size = UDim2.fromOffset(420, 112)
+	end
+end
+
+--[[
 	Sets default physical upgrade metadata on one plot.
 
 	Args:
@@ -1306,6 +1845,10 @@ end
 --[[
 	Builds all functional facilities inside one Sanctum plot.
 
+	The grid is intentionally ordered from the gate inward:
+	front = army command and skills; middle = knowledge, sacrifice, upgrades;
+	rear = long-term collection, cloning, and trophies.
+
 	Args:
 		plot (Model): Player plot model.
 		plot_index (number): Plot index.
@@ -1327,6 +1870,7 @@ local function build_plot_facilities(
 	plot:SetAttribute("PlotOwnerName", "")
 	plot:SetAttribute("PlotOccupied", false)
 	set_plot_upgrade_defaults(plot)
+	clear_legacy_plot_clutter(plot)
 
 	destroy_named_child(plot, FACILITIES_NAME)
 	destroy_named_child(plot, "PlotOwnerSign")
@@ -1342,27 +1886,17 @@ local function build_plot_facilities(
 		0
 	)
 	make_plot_owner_sign(plot, surface_cf, plot_index)
+	add_plot_walkways(facilities, surface_cf)
+	add_plot_guide(facilities, surface_cf)
 
-	local soul_cf = surface_cf * CFrame.new(0, 0, 55)
-	local formation_cf = surface_cf * CFrame.new(-65, 0, -43)
-	local skills_cf = surface_cf * CFrame.new(65, 0, -43)
-	local codex_cf = surface_cf * CFrame.new(-84, 0, 12)
-	local crucible_cf = surface_cf * CFrame.new(0, 0, -82)
-	local forge_cf = surface_cf * CFrame.new(84, 0, 12)
-	local master_cf = surface_cf * CFrame.new(-82, 0, 77)
-	local trophy_cf = surface_cf * CFrame.new(82, 0, 77)
-
-	local soul = make_station(
-		facilities,
-		"Soul Foundry & Cloning Hall",
-		soul_cf,
-		COLORS.soul,
-		"SoulFoundry",
-		plot_index,
-		46,
-		"SoulFoundryLevel"
-	)
-	add_clone_chambers(soul, soul_cf, plot_index)
+	local formation_cf = surface_cf * CFrame.new(-62, 0, -58)
+	local skills_cf = surface_cf * CFrame.new(62, 0, -58)
+	local codex_cf = surface_cf * CFrame.new(-80, 0, 10)
+	local crucible_cf = surface_cf * CFrame.new(0, 0, 10)
+	local forge_cf = surface_cf * CFrame.new(80, 0, 10)
+	local master_cf = surface_cf * CFrame.new(-84, 0, 76)
+	local soul_cf = surface_cf * CFrame.new(0, 0, 76)
+	local trophy_cf = surface_cf * CFrame.new(84, 0, 76)
 
 	local war_room = make_station(
 		facilities,
@@ -1371,7 +1905,7 @@ local function build_plot_facilities(
 		Color3.fromRGB(94, 160, 128),
 		"FormationEditor",
 		plot_index,
-		44,
+		46,
 		"FormationLevel"
 	)
 	add_unit_plinths(
@@ -1379,6 +1913,7 @@ local function build_plot_facilities(
 		formation_cf,
 		plot_index
 	)
+
 	make_station(
 		facilities,
 		"Skill Reliquary",
@@ -1386,9 +1921,10 @@ local function build_plot_facilities(
 		Color3.fromRGB(168, 106, 75),
 		"SkillLoadout",
 		plot_index,
-		44,
+		46,
 		"SkillReliquaryLevel"
 	)
+
 	make_station(
 		facilities,
 		"Necromancer Codex",
@@ -1396,7 +1932,7 @@ local function build_plot_facilities(
 		Color3.fromRGB(99, 139, 175),
 		"Codex",
 		plot_index,
-		40,
+		42,
 		"CodexLevel"
 	)
 
@@ -1407,8 +1943,19 @@ local function build_plot_facilities(
 		Color3.fromRGB(126, 48, 58),
 		"SoulCrucible",
 		plot_index,
-		38,
+		42,
 		"SoulCrucibleLevel"
+	)
+
+	make_station(
+		facilities,
+		"Foundry Upgrade Forge",
+		forge_cf,
+		Color3.fromRGB(205, 112, 56),
+		"Upgrades",
+		plot_index,
+		42,
+		"UpgradeForgeLevel"
 	)
 
 	local gallery = make_station(
@@ -1421,7 +1968,23 @@ local function build_plot_facilities(
 		58,
 		"MasterGalleryLevel"
 	)
-	add_master_plinths(gallery, master_cf, plot_index)
+	add_master_plinths(
+		gallery,
+		master_cf,
+		plot_index
+	)
+
+	local soul = make_station(
+		facilities,
+		"Soul Foundry & Cloning Hall",
+		soul_cf,
+		COLORS.soul,
+		"SoulFoundry",
+		plot_index,
+		70,
+		"SoulFoundryLevel"
+	)
+	add_clone_chambers(soul, soul_cf, plot_index)
 
 	local trophy_hall = make_station(
 		facilities,
@@ -1430,24 +1993,13 @@ local function build_plot_facilities(
 		COLORS.gold,
 		"Trophies",
 		plot_index,
-		52,
+		54,
 		"TrophyHallLevel"
 	)
 	add_trophy_plinths(
 		trophy_hall,
 		trophy_cf,
 		plot_index
-	)
-
-	make_station(
-		facilities,
-		"Foundry Upgrade Forge",
-		forge_cf,
-		Color3.fromRGB(205, 112, 56),
-		"Upgrades",
-		plot_index,
-		40,
-		"UpgradeForgeLevel"
 	)
 	return true
 end
