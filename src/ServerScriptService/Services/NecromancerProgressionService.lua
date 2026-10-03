@@ -24,6 +24,7 @@ local MAX_RAISE_REBIRTH_BONUS = 0.02
 local MAX_RAISE_REACH_BONUS = 5
 
 local soul_collection_service = nil :: any
+local plot_service = nil :: any
 local did_start = false
 
 type ProgressionState = {
@@ -195,7 +196,52 @@ end
 	Returns:
 		boolean: True when the loadout changed.
 ]]
+--[[
+	Checks every learning requirement for one skill.
+
+	Args:
+		player (Player): Player learning/equipping the skill.
+		state (ProgressionState): Current Necromancer progression.
+		skill_id (string): Skill identifier.
+
+	Returns:
+		boolean: True when all requirements are satisfied.
+]]
+local function is_skill_available(
+	player: Player,
+	state: ProgressionState,
+	skill_id: string
+): boolean
+	local reliquary_level = 1
+	local has_skillbook = false
+	if soul_collection_service then
+		if soul_collection_service.get_plot_upgrade_level then
+			reliquary_level =
+				soul_collection_service.get_plot_upgrade_level(
+					player,
+					"SkillReliquary"
+				)
+		end
+		if soul_collection_service.has_skillbook then
+			has_skillbook =
+				soul_collection_service.has_skillbook(
+					player,
+					skill_id
+				)
+		end
+	end
+
+	return NecromancerSkills.is_unlocked(
+		skill_id,
+		state.level,
+		state.rebirth_count,
+		reliquary_level,
+		has_skillbook
+	)
+end
+
 local function sanitize_equipped(
+	player: Player,
 	state: ProgressionState
 ): boolean
 	local allowed_slots = skill_slot_count(state.level)
@@ -207,11 +253,7 @@ local function sanitize_equipped(
 			break
 		end
 		if not seen[skill_id]
-			and NecromancerSkills.is_unlocked(
-				skill_id,
-				state.level,
-				state.rebirth_count
-			)
+			and is_skill_available(player, state, skill_id)
 		then
 			seen[skill_id] = true
 			table.insert(sanitized, skill_id)
@@ -301,18 +343,46 @@ local function client_snapshot(
 	state: ProgressionState
 )
 	local catalog = {}
+	local reliquary_level = 1
+	if soul_collection_service
+		and soul_collection_service.get_plot_upgrade_level
+	then
+		reliquary_level =
+			soul_collection_service.get_plot_upgrade_level(
+				player,
+				"SkillReliquary"
+			)
+	end
+
 	for _, definition in ipairs(NecromancerSkills.get_all()) do
+		local has_skillbook = not definition.requires_skillbook
+		if definition.requires_skillbook
+			and soul_collection_service
+			and soul_collection_service.has_skillbook
+		then
+			has_skillbook =
+				soul_collection_service.has_skillbook(
+					player,
+					definition.id
+				)
+		end
+
 		table.insert(catalog, {
 			id = definition.id,
 			name = definition.name,
 			description = definition.description,
 			unlockLevel = definition.unlock_level,
 			unlockRebirth = definition.unlock_rebirth,
+			reliquaryLevel = definition.reliquary_level,
+			requiresSkillbook = definition.requires_skillbook,
+			hasSkillbook = has_skillbook,
 			cooldown = definition.cooldown,
 			unlocked = NecromancerSkills.is_unlocked(
 				definition.id,
 				state.level,
-				state.rebirth_count
+				state.rebirth_count,
+				reliquary_level,
+				has_skillbook
 			),
 		})
 	end
@@ -338,6 +408,7 @@ local function client_snapshot(
 			state.level
 		),
 		skillSlots = skill_slot_count(state.level),
+		skillReliquaryLevel = reliquary_level,
 		equippedSkills = table.clone(state.equipped_skills),
 		canRebirth = state.level >= MAX_LEVEL,
 		inBase = soul_collection_service
@@ -402,6 +473,7 @@ end
 		number: Number of levels gained.
 ]]
 local function apply_level_ups(
+	player: Player,
 	state: ProgressionState
 ): number
 	local gained = 0
@@ -421,7 +493,7 @@ local function apply_level_ups(
 		state.xp = 0
 	end
 
-	sanitize_equipped(state)
+	sanitize_equipped(player, state)
 	return gained
 end
 
@@ -453,6 +525,21 @@ local function handle_set_loadout(
 		)
 		return
 	end
+	if not plot_service
+		or not plot_service.is_player_near_station
+		or not plot_service.is_player_near_station(
+			player,
+			"SkillLoadout",
+			22
+		)
+	then
+		send_result(
+			player,
+			false,
+			"Use your Skill Reliquary to change skills."
+		)
+		return
+	end
 
 	local requested = if typeof(payload) == "table"
 		then payload.skills
@@ -472,10 +559,10 @@ local function handle_set_loadout(
 		end
 		if typeof(skill_id) ~= "string"
 			or seen[skill_id]
-			or not NecromancerSkills.is_unlocked(
-				skill_id,
-				state.level,
-				state.rebirth_count
+			or not is_skill_available(
+				player,
+				state,
+				skill_id
 			)
 		then
 			send_result(player, false, "Loadout contains a locked skill.")
@@ -577,7 +664,7 @@ local function apply_loaded_profile(player: Player)
 		return
 	end
 
-	local changed = sanitize_equipped(state)
+	local changed = sanitize_equipped(player, state)
 	if changed then
 		commit_state(player, state)
 	end
@@ -617,9 +704,11 @@ end
 		None.
 ]]
 function NecromancerProgressionService.init(
-	soul_collection_ref: any
+	soul_collection_ref: any,
+	plot_service_ref: any?
 )
 	soul_collection_service = soul_collection_ref
+	plot_service = plot_service_ref
 end
 
 --[[
@@ -653,6 +742,12 @@ end
 	Returns:
 		ProgressionState?: Current persistent state.
 ]]
+function NecromancerProgressionService.push_snapshot(
+	player: Player
+)
+	send_snapshot(player)
+end
+
 function NecromancerProgressionService.get_state(
 	player: Player
 ): ProgressionState?
@@ -720,7 +815,7 @@ function NecromancerProgressionService.award_xp(
 	end
 
 	state.xp += math.max(0, math.floor(amount))
-	local gained = apply_level_ups(state)
+	local gained = apply_level_ups(player, state)
 	commit_state(player, state)
 	apply_attributes(player, state)
 	send_snapshot(player)
@@ -866,7 +961,7 @@ function NecromancerProgressionService.debug_set_progression(
 		0,
 		math.floor(raise_successes)
 	)
-	sanitize_equipped(state)
+	sanitize_equipped(player, state)
 	commit_state(player, state)
 	apply_attributes(player, state)
 	send_snapshot(player)

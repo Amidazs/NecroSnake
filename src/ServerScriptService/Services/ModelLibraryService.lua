@@ -824,6 +824,56 @@ function ModelLibraryService.list_template_names(): { string }
 	return result
 end
 
+--[[
+	Clones a unit template for static Sanctum presentation.
+
+	Display models never run NPC AI, never collide, and keep their current
+	rig pose so the same final R15 roster can be reused by Archives and
+	cloning chambers.
+
+	Args:
+		template_name (string): Canonical or normalized template name.
+		parent (Instance): Display container.
+
+	Returns:
+		Model?: Static presentation clone.
+]]
+function ModelLibraryService.clone_display_template(
+	template_name: string,
+	parent: Instance
+): Model?
+	local template = get_template_info(template_name)
+	if not template then
+		return nil
+	end
+
+	local clone = template:Clone()
+	clone.Name = "Display_" .. template_name
+	clone.Parent = parent
+
+	for _, instance in ipairs(clone:GetDescendants()) do
+		if instance:IsA("Script")
+			or instance:IsA("LocalScript")
+			or instance:IsA("ProximityPrompt")
+		then
+			instance:Destroy()
+		elseif instance:IsA("BasePart") then
+			instance.Anchored = true
+			instance.CanCollide = false
+			instance.CanQuery = false
+			instance.CanTouch = false
+			instance.Massless = true
+		elseif instance:IsA("Humanoid") then
+			instance.DisplayDistanceType =
+				Enum.HumanoidDisplayDistanceType.None
+			instance.AutoRotate = false
+			instance.WalkSpeed = 0
+		end
+	end
+
+	return clone
+end
+
 function ModelLibraryService.pick_spawn_template(names: { string }): string?
 	if #names <= 0 then
 		return nil

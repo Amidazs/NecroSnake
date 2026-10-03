@@ -29,6 +29,8 @@ local VALID_COHORTS: { [string]: boolean } = {
 }
 
 local model_library_service = nil :: any
+local soul_collection_service = nil :: any
+local plot_service = nil :: any
 local store: any = nil
 local store_lookup_attempted = false
 local did_start = false
@@ -111,9 +113,15 @@ local function default_cohort_for_template(template_name: string): string
 	return "SecondLine"
 end
 
-local function list_template_names(): { string }
-	if model_library_service and model_library_service.list_template_names then
-		return model_library_service.list_template_names()
+local function list_template_names(
+	player: Player
+): { string }
+	if soul_collection_service
+		and soul_collection_service.get_owned_template_names
+	then
+		return soul_collection_service.get_owned_template_names(
+			player
+		)
 	end
 	return {}
 end
@@ -155,7 +163,7 @@ local function build_snapshot(player: Player)
 	local profile = get_or_create_profile(player)
 	local templates = {}
 
-	for _, template_name in ipairs(list_template_names()) do
+	for _, template_name in ipairs(list_template_names(player)) do
 		local default_cohort = default_cohort_for_template(template_name)
 		local saved = profile.assignments[template_name]
 		table.insert(templates, {
@@ -296,9 +304,16 @@ local function schedule_save(player: Player)
 	end)
 end
 
-local function find_template_name(requested: string): string?
-	local normalized = string.gsub(string.lower(requested), "[%s_]+", "")
-	for _, template_name in ipairs(list_template_names()) do
+local function find_template_name(
+	player: Player,
+	requested: string
+): string?
+	local normalized = string.gsub(
+		string.lower(requested),
+		"[%s_]+",
+		""
+	)
+	for _, template_name in ipairs(list_template_names(player)) do
 		local key = string.gsub(string.lower(template_name), "[%s_]+", "")
 		if key == normalized then
 			return template_name
@@ -330,6 +345,25 @@ apply_template_to_live_units = function(
 	end
 end
 
+--[[
+	Checks whether the player is using their physical War Room.
+
+	Args:
+		player (Player): Player changing formation defaults.
+
+	Returns:
+		boolean: True when the owned War Room is nearby.
+]]
+local function is_at_war_room(player: Player): boolean
+	return plot_service ~= nil
+		and plot_service.is_player_near_station ~= nil
+		and plot_service.is_player_near_station(
+			player,
+			"FormationEditor",
+			22
+		)
+end
+
 local function set_template_assignment(
 	player: Player,
 	template_name: string,
@@ -343,8 +377,16 @@ local function set_template_assignment(
 		)
 		return
 	end
+	if not is_at_war_room(player) then
+		send_result(
+			player,
+			false,
+			"Use your Formation War Room to change formations."
+		)
+		return
+	end
 
-	local canonical = find_template_name(template_name)
+	local canonical = find_template_name(player, template_name)
 	if not canonical then
 		send_result(player, false, "Unknown unit template.")
 		return
@@ -380,8 +422,16 @@ local function reset_template_assignment(
 		)
 		return
 	end
+	if not is_at_war_room(player) then
+		send_result(
+			player,
+			false,
+			"Use your Formation War Room to change formations."
+		)
+		return
+	end
 
-	local canonical = find_template_name(template_name)
+	local canonical = find_template_name(player, template_name)
 	if not canonical then
 		send_result(player, false, "Unknown unit template.")
 		return
@@ -439,8 +489,14 @@ local function handle_remote(
 	end
 end
 
-function FormationProfileService.init(model_library: any)
+function FormationProfileService.init(
+	model_library: any,
+	soul_collection_ref: any?,
+	plot_service_ref: any?
+)
 	model_library_service = model_library
+	soul_collection_service = soul_collection_ref
+	plot_service = plot_service_ref
 end
 
 function FormationProfileService.get_cohort_for_template(

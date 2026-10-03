@@ -148,6 +148,7 @@ local function create_gui()
 	make_stroke(panel, 0.15)
 
 	local title = make_label(panel, "Soul Foundry", 22, true)
+	title.Name = "Title"
 	title.Position = UDim2.fromOffset(16, 12)
 	title.Size = UDim2.new(1, -82, 0, 26)
 
@@ -305,17 +306,9 @@ local function render_vault(snapshot: SoulSnapshot)
 			end)
 		else
 			local imprint = make_button(row, "Imprint", 92)
-			imprint.Position = UDim2.new(1, -204, 0, 21)
+			imprint.Position = UDim2.new(1, -104, 0, 21)
 			imprint.MouseButton1Click:Connect(function()
 				send_action("IMPRINT_MASTER", {
-					recordId = record.record_id,
-				})
-			end)
-
-			local dissolve = make_button(row, "Dissolve", 92)
-			dissolve.Position = UDim2.new(1, -104, 0, 21)
-			dissolve.MouseButton1Click:Connect(function()
-				send_action("DISSOLVE_UNIT", {
 					recordId = record.record_id,
 				})
 			end)
@@ -363,7 +356,11 @@ local function render_masters(snapshot: SoulSnapshot)
 		title.Size = UDim2.new(1, -220, 0, 20)
 
 		local abilities = #(record.ability_ids or {})
-		local detail = ("Evolution: %s | Abilities: %d"):format(
+		local detail = (
+			"Trait: %s | Size: %s | Evolution: %s | Abilities: %d"
+		):format(
+			record.trait or "None",
+			record.size_tier or "Normal",
 			record.evolution_id or "None",
 			abilities
 		)
@@ -515,11 +512,37 @@ local function render_snapshot(snapshot: SoulSnapshot)
 end
 
 local function set_tab(tab_name: string)
+	if tab_name ~= "Vault"
+		and tab_name ~= "Masters"
+		and tab_name ~= "Machines"
+	then
+		return
+	end
+
 	active_tab = tab_name
+
+	local title = panel:FindFirstChild("Title")
+	if title and title:IsA("TextLabel") then
+		if tab_name == "Masters" then
+			title.Text = "Master Archive"
+		elseif tab_name == "Machines" then
+			title.Text = "Soul Foundry"
+		else
+			title.Text = "Soul Vault"
+		end
+	end
+
 	if latest_snapshot then
 		render_snapshot(latest_snapshot)
 	end
 end
+
+panel:GetAttributeChangedSignal("RequestedTab"):Connect(function()
+	local requested = panel:GetAttribute("RequestedTab")
+	if typeof(requested) == "string" then
+		set_tab(requested)
+	end
+end)
 
 for _, tab_name in ipairs({ "Vault", "Masters", "Machines" }) do
 	local button = tabs:FindFirstChild(

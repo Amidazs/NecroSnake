@@ -37,6 +37,8 @@ local CORPSES_FOLDER_NAME = "Corpses"
 local army_service = nil :: any
 local pvp_service = nil :: any
 local progression_service = nil :: any
+local soul_collection_service = nil :: any
+local battlefield_loot_service = nil :: any
 local running = false
 local scan_task: thread? = nil
 local result_remote: RemoteEvent? = nil
@@ -338,6 +340,12 @@ local function handle_raise(player: Player, model: Model)
 	local corpse_position = if corpse_root
 		then corpse_root.Position
 		else model:GetPivot().Position
+	local template_name = model:GetAttribute("TemplateName")
+	if typeof(template_name) ~= "string"
+		or template_name == ""
+	then
+		template_name = model.Name
+	end
 
 	local success, status, chance, command_cost =
 		army_service.try_raise_dead(player, model)
@@ -379,6 +387,14 @@ local function handle_raise(player: Player, model: Model)
 			progression_service.record_raise_success(
 				player,
 				command_cost
+			)
+		end
+		if soul_collection_service
+			and soul_collection_service.record_codex_raise
+		then
+			soul_collection_service.record_codex_raise(
+				player,
+				template_name
 			)
 		end
 		send_result(player, {
@@ -545,6 +561,15 @@ local function initialize_corpse(model: Model)
 				command_cost,
 				false
 			)
+			if battlefield_loot_service
+				and battlefield_loot_service.spawn_kill_loot
+			then
+				battlefield_loot_service.spawn_kill_loot(
+					model,
+					killer,
+					command_cost
+				)
+			end
 		end
 	end
 
@@ -711,11 +736,15 @@ end
 function CombatService.init(
 	army_service_module,
 	pvp_service_ref: any?,
-	progression_service_ref: any?
+	progression_service_ref: any?,
+	soul_collection_service_ref: any?,
+	battlefield_loot_service_ref: any?
 )
 	army_service = army_service_module
 	pvp_service = pvp_service_ref
 	progression_service = progression_service_ref
+	soul_collection_service = soul_collection_service_ref
+	battlefield_loot_service = battlefield_loot_service_ref
 end
 
 function CombatService.start()

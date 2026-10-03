@@ -938,6 +938,47 @@ Work:
   completed a clean production play where the physical Forge opened with
   eight facility rows plus the current machine row and no runtime errors.
 
+**3 October 2026 deeper Sanctum gameplay loop:**
+- Each plot now has eight functional facilities. The new Soul Crucible
+  gives duplicate or unwanted raised units a permanent economic purpose:
+  sacrificing a stored unit destroys it and returns Soul Essence based on
+  its command cost, rarity, evolution and modifiers.
+- The old Master Gallery is now the Master Archive. Captured Masters are
+  physically displayed there, can be inspected/selected as cloning
+  templates, and Archive level continues to control preserved capacity.
+- Cloning chambers now have physical unit displays. The selected Master is
+  visible as the source template, while an active clone grows progressively
+  inside its tube as the machine approaches completion.
+- The Formation War Room is the only place where formation assignments can
+  be edited. Its roster is generated from unit templates the player actually
+  owns; undiscovered or unowned unit types are not shown as options.
+- Skill-loadout editing is likewise tied to the physical Skill Reliquary.
+  Starter skills remain ordinary progression unlocks; stronger skills now
+  require player progression, the required Reliquary level and a matching
+  permanently learned battlefield skillbook.
+- Battlefield skillbooks and Soul Essence are physical private loot drops.
+  Normal enemies can drop both at lower rates, bosses use higher rates, and
+  a learned skillbook is stored permanently in the Soul profile.
+- The Codex now learns exact unit types from successful Raises. Knowledge
+  milestones grant small permanent bonuses only to that template. Acceptance
+  verified 15 Skeleton Knight Raises granting +3% Defense.
+- Spawned owned units inherit their template's Codex combat bonuses, so the
+  knowledge system feeds back into the army without creating large global
+  stat inflation.
+- Core deterministic acceptance verified exactly three owned War Room unit
+  types, one Master Archive display, the Master visible in its cloning tube,
+  clone growth reaching 55%, Rally gated by Reliquary 2 plus its skillbook,
+  and a Giant/Frenzied/evolved sacrifice returning 29 Soul Essence.
+- Physical loot acceptance spawned an 11-Essence pickup and a
+  CorpseExplosion skillbook; both disappeared only after collection, and the
+  production profile subsequently reported the Essence change and learned
+  CorpseExplosion skillbook.
+- Permanent Formation and Skills HUD shortcuts remain hidden; these systems
+  are now entered through their physical War Room and Reliquary stations.
+- The complete final source set was re-synchronized into the canonical place
+  after acceptance, removing the stale-module ambiguity seen during one
+  intermediate Studio command-cache test.
+
 ## Phase 12 - Polish, onboarding, analytics and launch preparation
 
 Work:

@@ -42,6 +42,10 @@ local CombatService = require(
 	ServicesFolder:WaitForChild("CombatService")
 )
 
+local BattlefieldLootService = require(
+	ServicesFolder:WaitForChild("BattlefieldLootService")
+)
+
 local PvPService = require(
 	ServicesFolder:WaitForChild("PvPService")
 )
@@ -162,27 +166,42 @@ local function main()
 
 	-- Start services
 	ModelLibraryService.init()
+	PlotService.init(ModelLibraryService)
+	PlotService.start()
+
 	SoulCollectionService.init(
 		ModelLibraryService,
-		UnitRecordService
+		UnitRecordService,
+		PlotService
 	)
 	SoulCollectionService.start()
-	NecromancerProgressionService.init(SoulCollectionService)
+
+	NecromancerProgressionService.init(
+		SoulCollectionService,
+		PlotService
+	)
 	NecromancerProgressionService.start()
+
 	BackpackService.init(
 		SoulCollectionService,
 		UnitRecordService
 	)
 	BackpackService.start()
 
-	FormationProfileService.init(ModelLibraryService)
+	FormationProfileService.init(
+		ModelLibraryService,
+		SoulCollectionService,
+		PlotService
+	)
 	FormationProfileService.start()
+
 	ArmyService.init(
 		ModelLibraryService,
 		FormationProfileService,
 		UnitRecordService,
 		FactionService,
-		EvolutionService
+		EvolutionService,
+		SoulCollectionService
 	)
 	PvPService.init(
 		ArmyService,
@@ -200,8 +219,6 @@ local function main()
 	)
 	MatchmakingService.start()
 
-	PlotService.start()
-
 	ArmyAIService.init(ArmyService, PvPService)
 	ArmyRegenService.init(ArmyService)
 
@@ -210,10 +227,18 @@ local function main()
 		ArmyService,
 		FactionService
 	)
+	BattlefieldLootService.init(
+		SoulCollectionService,
+		NecromancerProgressionService
+	)
+	BattlefieldLootService.start()
+
 	CombatService.init(
 		ArmyService,
 		PvPService,
-		NecromancerProgressionService
+		NecromancerProgressionService,
+		SoulCollectionService,
+		BattlefieldLootService
 	)
 	PlayerCombatService.init(PvPService)
 	NecromancerSkillService.init(

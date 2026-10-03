@@ -12,13 +12,21 @@ local PlotUpgradeConfig = require(
 	ReplicatedStorage:WaitForChild("Shared")
 		:WaitForChild("PlotUpgradeConfig")
 )
+local CodexKnowledgeConfig = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("CodexKnowledgeConfig")
+)
+local NecromancerSkills = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("NecromancerSkills")
+)
 local SoulProfileStore = require(
 	script.Parent:WaitForChild("SoulProfileStore")
 )
 
 local SoulCollectionService = {}
 
-local PROFILE_VERSION = 3
+local PROFILE_VERSION = 4
 local STARTING_SOUL_ESSENCE = 60
 local STARTING_BASE_LEVEL = 1
 local MAX_BASE_LEVEL = PlotUpgradeConfig.get_max_level()
@@ -79,6 +87,8 @@ type Profile = {
 	soul_essence: number,
 	base_level: number,
 	plot_upgrades: { [string]: number },
+	codex_raises: { [string]: number },
+	learned_skillbooks: { [string]: boolean },
 	starter_secured_count: number,
 	progression: ProgressionState,
 	persistent: boolean,
@@ -88,6 +98,7 @@ type Profile = {
 
 local model_library_service = nil :: any
 local unit_record_service = nil :: any
+local plot_service = nil :: any
 local profiles_by_user_id: { [number]: Profile } = {}
 local did_start = false
 local process_task: thread? = nil
@@ -174,6 +185,8 @@ local function create_default_profile(): Profile
 		soul_essence = STARTING_SOUL_ESSENCE,
 		base_level = STARTING_BASE_LEVEL,
 		plot_upgrades = create_default_plot_upgrades(),
+		codex_raises = {},
+		learned_skillbooks = {},
 		starter_secured_count = 0,
 		progression = create_default_progression(),
 		persistent = false,
@@ -272,6 +285,72 @@ local function sanitize_skill_list(raw: any): { string }
 		end
 	end
 	return skills
+end
+
+--[[
+	Sanitizes per-template Codex Raise counts.
+
+	Args:
+		raw (any): Persisted Codex count table.
+
+	Returns:
+		{ [string]: number }: Valid non-negative counts.
+]]
+local function sanitize_codex_raises(
+	raw: any
+): { [string]: number }
+	local result: { [string]: number } = {}
+	if typeof(raw) ~= "table" then
+		return result
+	end
+
+	for template_name, count in pairs(raw) do
+		if typeof(template_name) == "string"
+			and template_name ~= ""
+			and typeof(count) == "number"
+		then
+			result[template_name] = math.max(
+				0,
+				math.floor(count)
+			)
+		end
+	end
+	return result
+end
+
+--[[
+	Sanitizes learned battlefield skillbooks.
+
+	Args:
+		raw (any): Persisted skillbook collection.
+
+	Returns:
+		{ [string]: boolean }: Learned skill IDs.
+]]
+local function sanitize_skillbooks(
+	raw: any
+): { [string]: boolean }
+	local result: { [string]: boolean } = {}
+	if typeof(raw) ~= "table" then
+		return result
+	end
+
+	for key, value in pairs(raw) do
+		local skill_id = nil
+		if typeof(key) == "string" and value == true then
+			skill_id = key
+		elseif typeof(value) == "string" then
+			skill_id = value
+		end
+
+		if skill_id then
+			local definition = NecromancerSkills.get(skill_id)
+			if definition and definition.requires_skillbook then
+				result[skill_id] = true
+			end
+		end
+	end
+	return result
 end
 
 local function sanitize_progression(raw: any): ProgressionState
@@ -411,6 +490,12 @@ local function sanitize_profile(
 		legacy_base_level
 	)
 	profile.base_level = profile.plot_upgrades.SoulFoundry
+	profile.codex_raises = sanitize_codex_raises(
+		raw.codex_raises
+	)
+	profile.learned_skillbooks = sanitize_skillbooks(
+		raw.learned_skillbooks
+	)
 	profile.starter_secured_count = math.clamp(
 		sanitize_positive_int(raw.starter_secured_count, 0),
 		0,
@@ -534,6 +619,163 @@ local function copy_plot_upgrades(
 	return result
 end
 
+--[[
+	Copies learned battlefield skillbooks in stable order.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		{ string }: Learned skill IDs.
+]]
+local function copy_skillbooks(profile: Profile): { string }
+	local result: { string } = {}
+	for skill_id, learned in pairs(profile.learned_skillbooks) do
+		if learned then
+			table.insert(result, skill_id)
+		end
+	end
+	table.sort(result)
+	return result
+end
+
+--[[
+	Builds client-safe Codex entries from Raise knowledge.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		{ any }: Sorted Codex entry payload.
+]]
+local function build_codex_entries(profile: Profile): { any }
+	local entries = {}
+	local codex_level = get_plot_upgrade_level(
+		profile,
+		"Codex"
+	)
+
+	for template_name, raise_count in pairs(profile.codex_raises) do
+		local next_milestone =
+			CodexKnowledgeConfig.get_next_milestone(
+				raise_count,
+				codex_level
+			)
+		table.insert(entries, {
+			templateName = template_name,
+			raiseCount = raise_count,
+			defenseBonus =
+				CodexKnowledgeConfig.get_defense_bonus(
+					raise_count,
+					codex_level
+				),
+			nextRaiseCount = next_milestone
+				and next_milestone.raise_count
+				or nil,
+			nextDefenseBonus = next_milestone
+				and next_milestone.defense_bonus
+				or nil,
+		})
+	end
+
+	table.sort(entries, function(left, right)
+		if left.raiseCount == right.raiseCount then
+			return left.templateName < right.templateName
+		end
+		return left.raiseCount > right.raiseCount
+	end)
+	return entries
+end
+
+--[[
+	Returns unit templates the player genuinely owns.
+
+	Stored units, Masters and assigned cloning templates all count as owned.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		{ string }: Sorted unique template names.
+]]
+local function owned_template_names(profile: Profile): { string }
+	local seen: { [string]: boolean } = {}
+	for _, record in ipairs(profile.units) do
+		seen[record.template_name] = true
+	end
+	for _, record in pairs(profile.masters) do
+		seen[record.template_name] = true
+	end
+	for _, machine in ipairs(profile.machines) do
+		local record = machine.master_snapshot
+		if record then
+			seen[record.template_name] = true
+		end
+	end
+
+	local result: { string } = {}
+	for template_name in pairs(seen) do
+		table.insert(result, template_name)
+	end
+	table.sort(result)
+	return result
+end
+
+--[[
+	Refreshes Codex defence on currently deployed owned units.
+
+	Args:
+		player (Player): Codex owner.
+		template_name (string): Unit template whose bonus changed.
+		old_bonus (number): Previously active bonus.
+		new_bonus (number): Newly active bonus.
+
+	Returns:
+		None.
+]]
+local function refresh_live_codex_bonus(
+	player: Player,
+	template_name: string,
+	new_bonus: number
+)
+	local armies = Workspace:FindFirstChild("PlayerArmies")
+	if not armies then
+		return
+	end
+
+	for _, instance in ipairs(armies:GetDescendants()) do
+		if instance:IsA("Model")
+			and instance:GetAttribute("ArmyOwnerUserId")
+				== player.UserId
+			and instance:GetAttribute("TemplateName")
+				== template_name
+		then
+			local current = instance:GetAttribute("Defense")
+			if typeof(current) ~= "number" then
+				current = 0
+			end
+			local applied_bonus = instance:GetAttribute(
+				"CodexDefenseBonus"
+			)
+			if typeof(applied_bonus) ~= "number" then
+				applied_bonus = 0
+			end
+			instance:SetAttribute(
+				"Defense",
+				math.clamp(
+					current - applied_bonus + new_bonus,
+					0,
+					0.9
+				)
+			)
+			instance:SetAttribute(
+				"CodexDefenseBonus",
+				new_bonus
+			)
+		end
+	end
+end
+
 local function get_safe_zone_region(): BasePart?
 	local zones = Workspace:FindFirstChild(ZONES_FOLDER_NAME)
 	local safe_world = zones and zones:FindFirstChild(
@@ -644,6 +886,34 @@ local function get_dissolve_value(record: UnitRecord): number
 		value += 5
 	end
 	return math.max(3, value)
+end
+
+--[[
+	Returns Soul Essence produced by the physical Soul Crucible.
+
+	Args:
+		profile (Profile): Player Soul profile.
+		record (UnitRecord): Stored unit being sacrificed.
+
+	Returns:
+		number: Soul Essence reward.
+]]
+local function get_sacrifice_value(
+	profile: Profile,
+	record: UnitRecord
+): number
+	local level = get_plot_upgrade_level(
+		profile,
+		"SoulCrucible"
+	)
+	local multiplier =
+		PlotUpgradeConfig.get_sacrifice_multiplier(level)
+	return math.max(
+		1,
+		math.floor(
+			get_dissolve_value(record) * multiplier + 0.5
+		)
+	)
 end
 
 local function get_machine_capacity(machine: MachineState): number
@@ -881,6 +1151,8 @@ local function build_persistence_snapshot(profile: Profile)
 		soul_essence = profile.soul_essence,
 		base_level = profile.base_level,
 		plot_upgrades = copy_plot_upgrades(profile),
+		codex_raises = table.clone(profile.codex_raises),
+		learned_skillbooks = copy_skillbooks(profile),
 		starter_secured_count = profile.starter_secured_count,
 		progression = copy_progression(profile.progression),
 	}
@@ -899,6 +1171,7 @@ local function machine_client_snapshot(
 	local clone_cost = nil
 	local clone_seconds = nil
 	local seconds_remaining = nil
+	local clone_progress = 0
 	if record then
 		clone_cost = get_clone_cost(record)
 		clone_seconds = get_clone_seconds(machine, record)
@@ -911,6 +1184,13 @@ local function machine_client_snapshot(
 				0,
 				clone_seconds - elapsed
 			)
+			clone_progress = math.clamp(
+				elapsed / math.max(1, clone_seconds),
+				0,
+				1
+			)
+		elseif machine.output_count > 0 then
+			clone_progress = 1
 		end
 	end
 
@@ -924,11 +1204,43 @@ local function machine_client_snapshot(
 		cloneCost = clone_cost,
 		cloneSeconds = clone_seconds,
 		secondsRemaining = seconds_remaining,
+		cloneProgress = clone_progress,
 		paused = machine.paused,
 		upgradeCost = if machine.level < MAX_MACHINE_LEVEL
 			then get_machine_upgrade_cost(profile, machine)
 			else nil,
 	}
+end
+
+--[[
+	Builds Soul Crucible options for stored non-Master units.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		{ any }: Sacrifice options with server-calculated rewards.
+]]
+local function build_sacrifice_options(
+	profile: Profile
+): { any }
+	local options = {}
+	for _, record in ipairs(profile.units) do
+		if not record.deployed_master_id then
+			table.insert(options, {
+				recordId = record.record_id,
+				templateName = record.template_name,
+				sizeTier = record.size_tier,
+				trait = record.trait,
+				evolutionId = record.evolution_id,
+				value = get_sacrifice_value(
+					profile,
+					record
+				),
+			})
+		end
+	end
+	return options
 end
 
 local function build_client_snapshot(
@@ -990,6 +1302,10 @@ local function build_client_snapshot(
 		baseUpgradeCost = get_base_upgrade_cost(profile),
 		plotUpgrades = plot_upgrades,
 		plotUpgradeOptions = upgrade_options,
+		codexEntries = build_codex_entries(profile),
+		learnedSkillbooks = copy_skillbooks(profile),
+		sacrificeOptions = build_sacrifice_options(profile),
+		ownedTemplates = owned_template_names(profile),
 		progression = copy_progression(profile.progression),
 		units = copy_records(profile.units),
 		masters = masters_as_array(profile),
@@ -1020,6 +1336,10 @@ local function update_player_attributes(
 		"SkillReliquary"
 	)
 	local codex_level = get_plot_upgrade_level(profile, "Codex")
+	local crucible_level = get_plot_upgrade_level(
+		profile,
+		"SoulCrucible"
+	)
 	local master_level = get_plot_upgrade_level(
 		profile,
 		"MasterGallery"
@@ -1041,6 +1361,7 @@ local function update_player_attributes(
 	player:SetAttribute("FormationLevel", formation_level)
 	player:SetAttribute("SkillReliquaryLevel", skill_level)
 	player:SetAttribute("CodexLevel", codex_level)
+	player:SetAttribute("SoulCrucibleLevel", crucible_level)
 	player:SetAttribute("MasterGalleryLevel", master_level)
 	player:SetAttribute("TrophyHallLevel", trophy_level)
 	player:SetAttribute("UpgradeForgeLevel", forge_level)
@@ -1054,11 +1375,17 @@ local function update_player_attributes(
 			skill_level
 		)
 	)
+	local sacrifice_multiplier =
+		PlotUpgradeConfig.get_sacrifice_multiplier(
+			crucible_level
+		)
+	player:SetAttribute(
+		"SoulSacrificeMultiplier",
+		sacrifice_multiplier
+	)
 	player:SetAttribute(
 		"DissolveEssenceMultiplier",
-		PlotUpgradeConfig.get_dissolve_multiplier(
-			codex_level
-		)
+		sacrifice_multiplier
 	)
 	player:SetAttribute(
 		"MasterStorageCapacity",
@@ -1081,9 +1408,18 @@ local function send_snapshot(player: Player)
 	end
 
 	update_player_attributes(player, profile)
+	local snapshot = build_client_snapshot(player, profile)
+	if plot_service
+		and plot_service.refresh_collection_visuals
+	then
+		plot_service.refresh_collection_visuals(
+			player,
+			snapshot
+		)
+	end
 	Remotes.soul_collection():FireClient(
 		player,
-		build_client_snapshot(player, profile)
+		snapshot
 	)
 end
 
@@ -1255,13 +1591,23 @@ local function imprint_master(
 	return true, "Soul Imprint registered as a Master."
 end
 
-local function dissolve_unit(
+local function sacrifice_unit(
 	player: Player,
 	record_id: string
 ): (boolean, string)
 	local profile, err = require_safe_zone(player)
 	if not profile then
 		return false, err or "Profile unavailable."
+	end
+	if not plot_service
+		or not plot_service.is_player_near_station
+		or not plot_service.is_player_near_station(
+			player,
+			"SoulCrucible",
+			22
+		)
+	then
+		return false, "Use your Soul Crucible to sacrifice units."
 	end
 
 	local index = find_unit_index(profile, record_id)
@@ -1271,23 +1617,15 @@ local function dissolve_unit(
 
 	local record = profile.units[index]
 	if record.deployed_master_id then
-		return false, "An at-risk Master cannot be dissolved."
+		return false, "An at-risk Master cannot be sacrificed."
 	end
 
 	record = remove_unit_at(profile, index)
-	local codex_level = get_plot_upgrade_level(profile, "Codex")
-	local multiplier =
-		PlotUpgradeConfig.get_dissolve_multiplier(codex_level)
-	local gained = math.max(
-		1,
-		math.floor(
-			get_dissolve_value(record) * multiplier + 0.5
-		)
-	)
+	local gained = get_sacrifice_value(profile, record)
 	profile.soul_essence += gained
 	process_profile(profile, now_seconds())
 	mark_changed(player, profile, true)
-	return true, ("Dissolved for %d Soul Essence."):format(gained)
+	return true, ("Sacrificed for %d Soul Essence."):format(gained)
 end
 
 local function deploy_master(
@@ -1601,8 +1939,10 @@ local function handle_remote(
 			player,
 			tostring(payload.recordId or "")
 		)
-	elseif action == "DISSOLVE_UNIT" then
-		ok, message = dissolve_unit(
+	elseif action == "SACRIFICE_UNIT"
+		or action == "DISSOLVE_UNIT"
+	then
+		ok, message = sacrifice_unit(
 			player,
 			tostring(payload.recordId or "")
 		)
@@ -1688,10 +2028,12 @@ end
 
 function SoulCollectionService.init(
 	model_library_ref: any,
-	unit_record_ref: any
+	unit_record_ref: any,
+	plot_service_ref: any?
 )
 	model_library_service = model_library_ref
 	unit_record_service = unit_record_ref
+	plot_service = plot_service_ref
 end
 
 function SoulCollectionService.get_deployable_units(
@@ -1881,6 +2223,13 @@ function SoulCollectionService.imprint_master(
 	return imprint_master(player, record_id)
 end
 
+function SoulCollectionService.sacrifice_unit(
+	player: Player,
+	record_id: string
+): (boolean, string)
+	return sacrifice_unit(player, record_id)
+end
+
 function SoulCollectionService.deploy_master(
 	player: Player,
 	master_id: string
@@ -1949,6 +2298,202 @@ function SoulCollectionService.get_plot_upgrades(
 		return create_default_plot_upgrades()
 	end
 	return copy_plot_upgrades(profile)
+end
+
+--[[
+	Returns unit templates genuinely owned by a player.
+
+	Args:
+		player (Player): Player whose collection is inspected.
+
+	Returns:
+		{ string }: Sorted unique template names.
+]]
+function SoulCollectionService.get_owned_template_names(
+	player: Player
+): { string }
+	local profile = get_profile(player)
+	if not profile then
+		return {}
+	end
+	return owned_template_names(profile)
+end
+
+--[[
+	Awards Soul Essence from battlefield pickups or other trusted systems.
+
+	Args:
+		player (Player): Player receiving Essence.
+		amount (number): Positive Essence amount.
+
+	Returns:
+		number: New Soul Essence balance.
+]]
+function SoulCollectionService.award_essence(
+	player: Player,
+	amount: number
+): number
+	local profile = get_profile(player)
+	if not profile or amount <= 0 then
+		return profile and profile.soul_essence or 0
+	end
+
+	profile.soul_essence += math.max(1, math.floor(amount))
+	mark_changed(player, profile, true)
+	return profile.soul_essence
+end
+
+--[[
+	Returns whether a battlefield skillbook has been learned.
+
+	Args:
+		player (Player): Player to inspect.
+		skill_id (string): Skill identifier.
+
+	Returns:
+		boolean: True when the skillbook is permanently learned.
+]]
+function SoulCollectionService.has_skillbook(
+	player: Player,
+	skill_id: string
+): boolean
+	local profile = get_profile(player)
+	return profile ~= nil
+		and profile.learned_skillbooks[skill_id] == true
+end
+
+--[[
+	Returns advanced skillbooks the player has not yet learned.
+
+	Args:
+		player (Player): Player to inspect.
+
+	Returns:
+		{ string }: Missing skill IDs.
+]]
+function SoulCollectionService.get_missing_skillbook_ids(
+	player: Player
+): { string }
+	local profile = get_profile(player)
+	if not profile then
+		return {}
+	end
+
+	local result: { string } = {}
+	for _, definition in ipairs(
+		NecromancerSkills.get_skillbook_skills()
+	) do
+		if not profile.learned_skillbooks[definition.id] then
+			table.insert(result, definition.id)
+		end
+	end
+	return result
+end
+
+--[[
+	Permanently learns one battlefield skillbook.
+
+	Args:
+		player (Player): Player learning the book.
+		skill_id (string): Skill identifier.
+
+	Returns:
+		boolean, string: Success and user-facing result.
+]]
+function SoulCollectionService.learn_skillbook(
+	player: Player,
+	skill_id: string
+): (boolean, string)
+	local profile = get_profile(player)
+	if not profile then
+		return false, "Soul profile is still loading."
+	end
+
+	local definition = NecromancerSkills.get(skill_id)
+	if not definition or not definition.requires_skillbook then
+		return false, "That is not a learnable battlefield skillbook."
+	end
+	if profile.learned_skillbooks[skill_id] then
+		return false, ("%s is already learned."):format(
+			definition.name
+		)
+	end
+
+	profile.learned_skillbooks[skill_id] = true
+	mark_changed(player, profile, true)
+	return true, ("Learned skillbook: %s."):format(
+		definition.name
+	)
+end
+
+--[[
+	Records Codex knowledge from a successful Raise.
+
+	Args:
+		player (Player): Necromancer gaining knowledge.
+		template_name (string): Raised unit template.
+
+	Returns:
+		number, number: New Raise count and active defence bonus.
+]]
+function SoulCollectionService.record_codex_raise(
+	player: Player,
+	template_name: string
+): (number, number)
+	local profile = get_profile(player)
+	if not profile or template_name == "" then
+		return 0, 0
+	end
+
+	local old_count = profile.codex_raises[template_name] or 0
+	local codex_level = get_plot_upgrade_level(
+		profile,
+		"Codex"
+	)
+	local new_count = old_count + 1
+	local new_bonus =
+		CodexKnowledgeConfig.get_defense_bonus(
+			new_count,
+			codex_level
+		)
+
+	profile.codex_raises[template_name] = new_count
+	refresh_live_codex_bonus(
+		player,
+		template_name,
+		new_bonus
+	)
+	mark_changed(player, profile, true)
+	return new_count, new_bonus
+end
+
+--[[
+	Returns the Codex defence bonus for a unit template.
+
+	Args:
+		player (Player): Codex owner.
+		template_name (string): Unit template.
+
+	Returns:
+		number: Additive defence bonus.
+]]
+function SoulCollectionService.get_codex_defense_bonus(
+	player: Player,
+	template_name: string
+): number
+	local profile = get_profile(player)
+	if not profile then
+		return 0
+	end
+	local count = profile.codex_raises[template_name] or 0
+	local codex_level = get_plot_upgrade_level(
+		profile,
+		"Codex"
+	)
+	return CodexKnowledgeConfig.get_defense_bonus(
+		count,
+		codex_level
+	)
 end
 
 function SoulCollectionService.get_snapshot_for_test(
@@ -2132,10 +2677,11 @@ function SoulCollectionService.start()
 			local now = now_seconds()
 			for _, player in ipairs(Players:GetPlayers()) do
 				local profile = get_profile(player)
-				if profile
-					and process_profile(profile, now)
-				then
-					mark_changed(player, profile, true)
+				if profile then
+					if process_profile(profile, now) then
+						mark_changed(player, profile, false)
+					end
+					send_snapshot(player)
 				end
 			end
 			task.wait(PROCESS_INTERVAL_SECONDS)

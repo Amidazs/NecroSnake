@@ -20,6 +20,7 @@ local formation_profile_service = nil :: any
 local unit_record_service = nil :: any
 local faction_service = nil :: any
 local evolution_service = nil :: any
+local soul_collection_service = nil :: any
 local did_init = false
 
 local PLAYER_ARMIES_FOLDER_NAME = "PlayerArmies"
@@ -318,6 +319,25 @@ local function spawn_one_unit(
 
 	local cohort = nil
 	local template_identity = model:GetAttribute(ATTR_TEMPLATE_NAME)
+	if typeof(template_identity) == "string"
+		and soul_collection_service
+		and soul_collection_service.get_codex_defense_bonus
+	then
+		local codex_bonus =
+			soul_collection_service.get_codex_defense_bonus(
+				player,
+				template_identity
+			)
+		local defense = model:GetAttribute("Defense")
+		if typeof(defense) ~= "number" then
+			defense = 0
+		end
+		model:SetAttribute("CodexDefenseBonus", codex_bonus)
+		model:SetAttribute(
+			"Defense",
+			math.clamp(defense + codex_bonus, 0, 0.9)
+		)
+	end
 	if formation_profile_service
 		and formation_profile_service.get_cohort_for_template
 		and typeof(template_identity) == "string"
@@ -580,13 +600,15 @@ function ArmyService.init(
 	formation_profile_service_ref: any?,
 	unit_record_service_ref: any?,
 	faction_service_ref: any?,
-	evolution_service_ref: any?
+	evolution_service_ref: any?,
+	soul_collection_service_ref: any?
 )
 	model_library_service = model_library
 	formation_profile_service = formation_profile_service_ref
 	unit_record_service = unit_record_service_ref
 	faction_service = faction_service_ref
 	evolution_service = evolution_service_ref
+	soul_collection_service = soul_collection_service_ref
 	did_init = true
 
 	Players.PlayerAdded:Connect(function(player)

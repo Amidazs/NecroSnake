@@ -8,6 +8,8 @@ export type SkillDefinition = {
 	description: string,
 	unlock_level: number,
 	unlock_rebirth: number,
+	reliquary_level: number,
+	requires_skillbook: boolean,
 	cooldown: number,
 }
 
@@ -18,6 +20,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Raise a short-lived wall that blocks movement.",
 		unlock_level = 10,
 		unlock_rebirth = 0,
+		reliquary_level = 1,
+		requires_skillbook = false,
 		cooldown = 18,
 	},
 	{
@@ -26,6 +30,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Pull your surviving army back around you.",
 		unlock_level = 12,
 		unlock_rebirth = 0,
+		reliquary_level = 1,
+		requires_skillbook = false,
 		cooldown = 14,
 	},
 	{
@@ -34,6 +40,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Briefly disables nearby enemy units.",
 		unlock_level = 15,
 		unlock_rebirth = 0,
+		reliquary_level = 1,
+		requires_skillbook = false,
 		cooldown = 22,
 	},
 	{
@@ -42,6 +50,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Temporarily increases your army's damage.",
 		unlock_level = 20,
 		unlock_rebirth = 0,
+		reliquary_level = 2,
+		requires_skillbook = true,
 		cooldown = 24,
 	},
 	{
@@ -50,6 +60,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Consume a corpse to damage nearby enemies.",
 		unlock_level = 25,
 		unlock_rebirth = 0,
+		reliquary_level = 2,
+		requires_skillbook = true,
 		cooldown = 20,
 	},
 	{
@@ -58,6 +70,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Destroy one undead to restore Necromancer health.",
 		unlock_level = 30,
 		unlock_rebirth = 0,
+		reliquary_level = 3,
+		requires_skillbook = true,
 		cooldown = 28,
 	},
 	{
@@ -66,6 +80,8 @@ local DEFINITIONS: { SkillDefinition } = {
 		description = "Prestige option: trade army health for damage.",
 		unlock_level = 10,
 		unlock_rebirth = 1,
+		reliquary_level = 3,
+		requires_skillbook = true,
 		cooldown = 32,
 	},
 }
@@ -105,7 +121,26 @@ function NecromancerSkills.get_all(): { SkillDefinition }
 end
 
 --[[
-	Checks whether progression has unlocked a skill.
+	Returns only skills that require battlefield skillbooks.
+
+	Args:
+		None.
+
+	Returns:
+		{ SkillDefinition }: Skillbook-gated definitions.
+]]
+function NecromancerSkills.get_skillbook_skills(): { SkillDefinition }
+	local result: { SkillDefinition } = {}
+	for _, definition in ipairs(DEFINITIONS) do
+		if definition.requires_skillbook then
+			table.insert(result, definition)
+		end
+	end
+	return result
+end
+
+--[[
+	Checks level and Rebirth requirements only.
 
 	Args:
 		skill_id (string): Skill identifier.
@@ -113,9 +148,9 @@ end
 		rebirth_count (number): Completed Rebirth count.
 
 	Returns:
-		boolean: True when the skill is available.
+		boolean: True when progression requirements are met.
 ]]
-function NecromancerSkills.is_unlocked(
+function NecromancerSkills.meets_progression(
 	skill_id: string,
 	level: number,
 	rebirth_count: number
@@ -127,6 +162,48 @@ function NecromancerSkills.is_unlocked(
 
 	return level >= definition.unlock_level
 		and rebirth_count >= definition.unlock_rebirth
+end
+
+--[[
+	Checks every learning requirement for one skill.
+
+	Args:
+		skill_id (string): Skill identifier.
+		level (number): Current Necromancer level.
+		rebirth_count (number): Completed Rebirth count.
+		reliquary_level (number): Current Skill Reliquary level.
+		has_skillbook (boolean): Whether the skillbook was learned.
+
+	Returns:
+		boolean: True when the skill can be equipped.
+]]
+function NecromancerSkills.is_unlocked(
+	skill_id: string,
+	level: number,
+	rebirth_count: number,
+	reliquary_level: number?,
+	has_skillbook: boolean?
+): boolean
+	local definition = BY_ID[skill_id]
+	if not definition then
+		return false
+	end
+	if not NecromancerSkills.meets_progression(
+		skill_id,
+		level,
+		rebirth_count
+	) then
+		return false
+	end
+
+	local reliquary = reliquary_level or 1
+	if reliquary < definition.reliquary_level then
+		return false
+	end
+	if definition.requires_skillbook and has_skillbook ~= true then
+		return false
+	end
+	return true
 end
 
 return NecromancerSkills

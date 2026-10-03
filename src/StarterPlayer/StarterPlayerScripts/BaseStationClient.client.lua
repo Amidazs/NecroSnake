@@ -13,6 +13,7 @@ local player_gui = player:WaitForChild("PlayerGui")
 
 local INFO_GUI_NAME = "NecroBaseInfoGui"
 local UPGRADE_GUI_NAME = "NecroPlotUpgradeGui"
+local CRUCIBLE_GUI_NAME = "NecroSoulCrucibleGui"
 local PERSONAL_LABEL_NAME = "PersonalBaseDisplay"
 local BOSS_TEMPLATES = {
 	GraveBaron = true,
@@ -45,8 +46,9 @@ local soul_remote = get_soul_remote()
 local INFO_TEXT: { [string]: { title: string, body: string } } = {
 	Codex = {
 		title = "Necromancer Codex",
-		body = "Faction, role, rarity, evolution and boss discoveries "
-			.. "will be recorded here as the roster art is replaced.",
+		body = "Every successful Raise teaches you more about that exact "
+			.. "unit type. Raise milestones unlock small permanent "
+			.. "defence bonuses, limited by Codex level.",
 	},
 	Trophies = {
 		title = "Boss Trophy Hall",
@@ -428,12 +430,22 @@ local function render_base_snapshot(snapshot: any)
 		"Empty Master Slot",
 		Color3.fromRGB(205, 166, 235)
 	)
+
+	local roster_records = {}
+	for _, template_name in ipairs(
+		snapshot.ownedTemplates or {}
+	) do
+		table.insert(roster_records, {
+			template_name = template_name,
+		})
+	end
 	render_record_plinths(
 		"UnitDisplaySlot",
-		snapshot.units or {},
-		"Empty Unit Slot",
+		roster_records,
+		"Empty Roster Slot",
 		Color3.fromRGB(164, 197, 218)
 	)
+
 	render_trophies(snapshot)
 	render_machines(snapshot)
 end
@@ -486,41 +498,56 @@ end
 		string: Readable discovery summary.
 ]]
 local function build_codex_text(snapshot: any): string
-	local factions: { [string]: boolean } = {}
-	local roles: { [string]: boolean } = {}
-	local evolutions: { [string]: boolean } = {}
-	for _, collection_name in ipairs({ "units", "masters" }) do
-		for _, record in ipairs(snapshot[collection_name] or {}) do
-			if record.faction_id then
-				factions[tostring(record.faction_id)] = true
-			end
-			if record.combat_role then
-				roles[tostring(record.combat_role)] = true
-			end
-			if record.evolution_id then
-				evolutions[tostring(record.evolution_id)] = true
-			end
-		end
+	local entries = snapshot.codexEntries or {}
+	if #entries == 0 then
+		return "No Raise knowledge recorded yet. Successfully Raise the "
+			.. "same unit type repeatedly to unlock permanent Codex "
+			.. "defence bonuses for that exact template."
 	end
 
-	local function count_keys(values: { [string]: boolean }): number
-		local count = 0
-		for _ in pairs(values) do
-			count += 1
+	local lines = {
+		"Raise knowledge grants small permanent defence bonuses:",
+	}
+	local shown = math.min(#entries, 6)
+	for index = 1, shown do
+		local entry = entries[index]
+		local name = tostring(entry.templateName or "Unknown Unit")
+		local raises = tonumber(entry.raiseCount) or 0
+		local bonus = tonumber(entry.defenseBonus) or 0
+		local bonus_percent = math.floor(bonus * 100 + 0.5)
+
+		local progress = "All current milestones complete"
+		if entry.nextRaiseCount then
+			local next_count = tonumber(entry.nextRaiseCount) or raises
+			local next_bonus =
+				tonumber(entry.nextDefenseBonus) or bonus
+			progress = ("next: %d Raises → +%d%% DEF"):format(
+				next_count,
+				math.floor(next_bonus * 100 + 0.5)
+			)
 		end
-		return count
+
+		table.insert(
+			lines,
+			("%s — %d Raises, +%d%% DEF (%s)"):format(
+				name,
+				raises,
+				bonus_percent,
+				progress
+			)
+		)
 	end
 
-	return (
-		"Your Soul Vault currently records %d faction(s), "
-		.. "%d combat role(s), and %d evolution type(s). "
-		.. "The Codex will gain full creature pages as final R15 "
-		.. "roster models replace the current backend placeholders."
-	):format(
-		count_keys(factions),
-		count_keys(roles),
-		count_keys(evolutions)
-	)
+	if #entries > shown then
+		table.insert(
+			lines,
+			("...and %d more discovered unit type(s)."):format(
+				#entries - shown
+			)
+		)
+	end
+
+	return table.concat(lines, "\n")
 end
 
 --[[
@@ -997,7 +1024,175 @@ local function open_upgrade_forge()
 end
 
 --[[
-	Opens the Soul Foundry interface.
+	Creates or retrieves the physical Soul Crucible GUI.
+
+	Args:
+		None.
+
+	Returns:
+		ScreenGui: Crucible GUI.
+		Frame: Main panel.
+		TextLabel: Essence summary.
+		TextLabel: Result/status label.
+		ScrollingFrame: Sacrifice rows.
+]]
+local function get_crucible_gui(): (
+	ScreenGui,
+	Frame,
+	TextLabel,
+	TextLabel,
+	ScrollingFrame
+)
+	local existing = player_gui:FindFirstChild(CRUCIBLE_GUI_NAME)
+	if existing and existing:IsA("ScreenGui") then
+		local panel = existing:FindFirstChild("Panel")
+		if panel and panel:IsA("Frame") then
+			local summary = panel:FindFirstChild("Summary")
+			local status = panel:FindFirstChild("Status")
+			local content = panel:FindFirstChild("Content")
+			if summary and summary:IsA("TextLabel")
+				and status and status:IsA("TextLabel")
+				and content
+				and content:IsA("ScrollingFrame")
+			then
+				return existing, panel, summary, status, content
+			end
+		end
+		existing:Destroy()
+	end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = CRUCIBLE_GUI_NAME
+	gui.ResetOnSpawn = false
+	gui.Parent = player_gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(620, 540)
+	panel.BackgroundColor3 = Color3.fromRGB(18, 10, 12)
+	panel.BorderSizePixel = 0
+	panel.Visible = false
+	panel.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = panel
+
+	local title = make_upgrade_label(
+		panel,
+		"Sacrificial Soul Crucible",
+		22,
+		true
+	)
+	title.Position = UDim2.fromOffset(18, 14)
+	title.Size = UDim2.new(1, -80, 0, 28)
+
+	local summary = make_upgrade_label(panel, "", 13, false)
+	summary.Name = "Summary"
+	summary.Position = UDim2.fromOffset(18, 48)
+	summary.Size = UDim2.new(1, -36, 0, 20)
+	summary.TextColor3 = Color3.fromRGB(215, 169, 176)
+
+	local status = make_upgrade_label(panel, "", 12, false)
+	status.Name = "Status"
+	status.Position = UDim2.fromOffset(18, 72)
+	status.Size = UDim2.new(1, -36, 0, 20)
+	status.TextColor3 = Color3.fromRGB(231, 188, 147)
+
+	local close = make_upgrade_button(panel, "X")
+	close.Name = "Close"
+	close.Size = UDim2.fromOffset(36, 30)
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -14, 0, 14)
+	close.Activated:Connect(function()
+		panel.Visible = false
+	end)
+
+	local content = Instance.new("ScrollingFrame")
+	content.Name = "Content"
+	content.Position = UDim2.fromOffset(18, 104)
+	content.Size = UDim2.new(1, -36, 1, -122)
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel = 0
+	content.ScrollBarThickness = 6
+	content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	content.CanvasSize = UDim2.fromOffset(0, 0)
+	content.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = content
+
+	return gui, panel, summary, status, content
+end
+
+--[[
+	Renders units that can be sacrificed for Soul Essence.
+
+	Args:
+		snapshot (any): Current Soul Collection snapshot.
+
+	Returns:
+		None.
+]]
+local function render_crucible(snapshot: any)
+	local _, _, summary, _, content = get_crucible_gui()
+	clear_upgrade_rows(content)
+
+	local essence = tonumber(snapshot.soulEssence) or 0
+	local multiplier = tonumber(
+		player:GetAttribute("SoulSacrificeMultiplier")
+	) or 1
+	summary.Text = (
+		"Soul Essence: %d   •   Sacrifice yield: %d%%"
+	):format(
+		essence,
+		math.floor(multiplier * 100 + 0.5)
+	)
+
+	local options = snapshot.sacrificeOptions or {}
+	if #options == 0 then
+		render_upgrade_row(
+			content,
+			"No stored units available",
+			"Raise and extract unwanted units to sacrifice them here.",
+			"",
+			false,
+			"SACRIFICE_UNIT",
+			{}
+		)
+		return
+	end
+
+	for _, option in ipairs(options) do
+		local template_name = tostring(
+			option.templateName or "Unknown Unit"
+		)
+		local size_tier = tostring(option.sizeTier or "Normal")
+		local trait = tostring(option.trait or "None")
+		local value = tonumber(option.value) or 0
+		local details = ("%s • %s"):format(
+			size_tier,
+			trait
+		)
+
+		render_upgrade_row(
+			content,
+			template_name,
+			details,
+			("Sacrifice +%d"):format(value),
+			true,
+			"SACRIFICE_UNIT",
+			{ recordId = tostring(option.recordId or "") }
+		)
+	end
+end
+
+--[[
+	Opens the physical Sacrificial Soul Crucible.
 
 	Args:
 		None.
@@ -1005,10 +1200,29 @@ end
 	Returns:
 		None.
 ]]
-local function open_soul_foundry()
+local function open_crucible()
+	local _, panel = get_crucible_gui()
+	panel.Visible = true
+	if latest_snapshot then
+		render_crucible(latest_snapshot)
+	end
+	request_snapshot()
+end
+
+--[[
+	Opens the Soul Foundry interface.
+
+	Args:
+		tab_name (string): "Machines" or "Masters" context.
+
+	Returns:
+		None.
+]]
+local function open_soul_foundry(tab_name: string)
 	local gui = player_gui:FindFirstChild("NecroSoulFoundryGui")
 	local panel = gui and gui:FindFirstChild("FoundryPanel")
 	if panel and panel:IsA("GuiObject") then
+		panel:SetAttribute("RequestedTab", tab_name)
 		panel.Visible = true
 	end
 	soul_remote:FireServer("REQUEST")
@@ -1092,10 +1306,18 @@ local function activate_station(station_id: string)
 		return
 	end
 
-	if station_id == "SoulFoundry"
-		or station_id == "Masters"
-	then
-		open_soul_foundry()
+	if station_id == "SoulFoundry" then
+		open_soul_foundry("Machines")
+		return
+	end
+
+	if station_id == "Masters" then
+		open_soul_foundry("Masters")
+		return
+	end
+
+	if station_id == "SoulCrucible" then
+		open_crucible()
 		return
 	end
 
@@ -1171,15 +1393,31 @@ local function on_soul_payload(payload: any)
 		then
 			render_upgrade_forge(payload)
 		end
+
+		local crucible_gui =
+			player_gui:FindFirstChild(CRUCIBLE_GUI_NAME)
+		local crucible_panel = crucible_gui
+			and crucible_gui:FindFirstChild("Panel")
+		if crucible_panel
+			and crucible_panel:IsA("GuiObject")
+			and crucible_panel.Visible
+		then
+			render_crucible(payload)
+		end
 		return
 	end
 
 	if payload.kind == "RESULT" then
-		local gui = player_gui:FindFirstChild(UPGRADE_GUI_NAME)
-		local panel = gui and gui:FindFirstChild("Panel")
-		local status = panel and panel:FindFirstChild("Status")
-		if status and status:IsA("TextLabel") then
-			status.Text = tostring(payload.message or "")
+		for _, gui_name in ipairs({
+			UPGRADE_GUI_NAME,
+			CRUCIBLE_GUI_NAME,
+		}) do
+			local gui = player_gui:FindFirstChild(gui_name)
+			local panel = gui and gui:FindFirstChild("Panel")
+			local status = panel and panel:FindFirstChild("Status")
+			if status and status:IsA("TextLabel") then
+				status.Text = tostring(payload.message or "")
+			end
 		end
 	end
 end

@@ -410,15 +410,33 @@ local function render_skill_row(definition: any)
 	title.Position = UDim2.fromOffset(10, 7)
 	title.Size = UDim2.new(1, -120, 0, 18)
 
-	local unlock_text = if definition.unlocked
-		then tostring(definition.description or "")
-		else ("Unlock: Lv %d%s"):format(
-			definition.unlockLevel or 1,
-			(definition.unlockRebirth or 0) > 0
-				and (" + Rebirth "
-					.. tostring(definition.unlockRebirth))
-				or ""
-		)
+	local unlock_text = tostring(definition.description or "")
+	if not definition.unlocked then
+		local requirements = {
+			("Lv %d"):format(definition.unlockLevel or 1),
+			("Reliquary Lv %d"):format(
+				definition.reliquaryLevel or 1
+			),
+		}
+		if (definition.unlockRebirth or 0) > 0 then
+			table.insert(
+				requirements,
+				("Rebirth %d"):format(
+					definition.unlockRebirth
+				)
+			)
+		end
+		if definition.requiresSkillbook
+			and not definition.hasSkillbook
+		then
+			table.insert(
+				requirements,
+				"Battlefield skillbook"
+			)
+		end
+		unlock_text = "Requires: "
+			.. table.concat(requirements, " • ")
+	end
 	local detail = make_label(row, unlock_text, 10, false)
 	detail.Position = UDim2.fromOffset(10, 29)
 	detail.Size = UDim2.new(1, -120, 0, 28)
@@ -498,15 +516,17 @@ local function render_snapshot(new_snapshot: any)
 		end
 	end
 
-	ui.editor_button.Visible = new_snapshot.inBase == true
-	if not ui.editor_button.Visible then
+	ui.editor_button.Visible = false
+	if new_snapshot.inBase ~= true then
 		editor_visible = false
 		ui.editor.Visible = false
 	end
 
 	ui.editor_summary.Text = (
-		"Slots: %d/3 | Command: %d | Raise bonus: +%d%%"
+		"Reliquary Lv %d | Slots: %d/3 | Command: %d | "
+			.. "Raise bonus: +%d%%"
 	):format(
+		new_snapshot.skillReliquaryLevel or 1,
 		skill_slots,
 		new_snapshot.commandCapacity or 5,
 		math.floor((new_snapshot.raiseChanceBonus or 0) * 100)
@@ -570,15 +590,16 @@ end
 ]]
 local function refresh_zone()
 	local in_base = LOCAL_PLAYER:GetAttribute("PvPZone") == "SafeZone"
-	ui.editor_button.Visible = in_base
-		and LOCAL_PLAYER:GetAttribute("SoulProfileLoaded") == true
+	ui.editor_button.Visible = false
 
-	if not ui.editor_button.Visible then
+	if not in_base then
 		editor_visible = false
 		ui.editor.Visible = false
 	end
 
-	if in_base then
+	if in_base
+		and LOCAL_PLAYER:GetAttribute("SoulProfileLoaded") == true
+	then
 		Remotes.progression():FireServer("REQUEST")
 	end
 end

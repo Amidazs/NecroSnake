@@ -113,7 +113,8 @@ subtitle.TextSize = 12
 subtitle.TextColor3 = Color3.fromRGB(155, 180, 168)
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.TextWrapped = true
-subtitle.Text = "Choose the default cohort for each unit type. Newly deployed, raised, or cloned units inherit this rule."
+subtitle.Text = "Choose the default cohort for each unit type. "
+	.. "Newly deployed, raised, or cloned units inherit this rule."
 subtitle.Parent = panel
 
 local close_button = Instance.new("TextButton")
@@ -422,7 +423,9 @@ remote.OnClientEvent:Connect(function(payload)
 			persistence_label.Text = "Saved profile: persistent across sessions."
 			persistence_label.TextColor3 = Color3.fromRGB(145, 220, 170)
 		else
-			persistence_label.Text = "Studio/session fallback: profile changes work now; published servers save them persistently."
+			persistence_label.Text =
+				"Studio/session fallback: profile changes work now; "
+				.. "published servers save them persistently."
 			persistence_label.TextColor3 = Color3.fromRGB(225, 190, 115)
 		end
 		return
@@ -443,7 +446,7 @@ end)
 task.spawn(function()
 	while gui.Parent ~= nil do
 		local safe = is_in_safe_zone()
-		open_button.Visible = safe
+		open_button.Visible = false
 		if not safe and panel.Visible then
 			panel.Visible = false
 		end

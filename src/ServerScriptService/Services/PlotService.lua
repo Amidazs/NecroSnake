@@ -22,10 +22,13 @@ local UPGRADE_ATTRIBUTES = {
 	"FormationLevel",
 	"SkillReliquaryLevel",
 	"CodexLevel",
+	"SoulCrucibleLevel",
 	"MasterGalleryLevel",
 	"TrophyHallLevel",
 	"UpgradeForgeLevel",
 }
+
+local model_library_service = nil :: any
 
 local assigned_plot_by_user_id: { [number]: Model } = {}
 local connections_by_user_id: {
@@ -469,6 +472,342 @@ local function connect_player_progression(
 end
 
 --[[
+	Removes one generated collection display.
+
+	Args:
+		parent (Instance): Display parent.
+		name (string): Generated child name.
+
+	Returns:
+		None.
+]]
+local function clear_display(
+	parent: Instance,
+	name: string
+)
+	local existing = parent:FindFirstChild(name)
+	if existing then
+		existing:Destroy()
+	end
+end
+
+--[[
+	Stores original part transparency on a display model.
+
+	Args:
+		model (Model): Newly cloned presentation model.
+
+	Returns:
+		None.
+]]
+local function prepare_display_model(model: Model)
+	for _, instance in ipairs(model:GetDescendants()) do
+		if instance:IsA("BasePart") then
+			instance:SetAttribute(
+				"DisplayBaseTransparency",
+				instance.Transparency
+			)
+		end
+	end
+end
+
+--[[
+	Changes display transparency without losing template transparency.
+
+	Args:
+		model (Model): Presentation model.
+		alpha (number): Additional transparency from zero to one.
+
+	Returns:
+		None.
+]]
+local function set_display_transparency(
+	model: Model,
+	alpha: number
+)
+	local safe_alpha = math.clamp(alpha, 0, 1)
+	for _, instance in ipairs(model:GetDescendants()) do
+		if instance:IsA("BasePart") then
+			local base = instance:GetAttribute(
+				"DisplayBaseTransparency"
+			)
+			if typeof(base) ~= "number" then
+				base = instance.Transparency
+			end
+			instance.Transparency = math.clamp(
+				base + (1 - base) * safe_alpha,
+				0,
+				1
+			)
+		end
+	end
+end
+
+--[[
+	Creates or updates one static unit presentation model.
+
+	Args:
+		parent (Instance): Display parent.
+		display_name (string): Child model name.
+		record (any): Soul record with template_name.
+		cframe (CFrame): Desired world transform.
+		scale (number): Model scale.
+		alpha (number): Additional transparency.
+
+	Returns:
+		Model?: Presentation model.
+]]
+local function render_record_model(
+	parent: Instance,
+	display_name: string,
+	record: any,
+	cframe: CFrame,
+	scale: number,
+	alpha: number
+): Model?
+	if typeof(record) ~= "table" then
+		clear_display(parent, display_name)
+		return nil
+	end
+
+	local template_name = record.template_name
+	if typeof(template_name) ~= "string"
+		or template_name == ""
+	then
+		clear_display(parent, display_name)
+		return nil
+	end
+
+	local record_id = tostring(record.record_id or template_name)
+	local existing = parent:FindFirstChild(display_name)
+	local model = if existing and existing:IsA("Model")
+		then existing
+		else nil
+
+	if model
+		and (
+			model:GetAttribute("DisplayRecordId") ~= record_id
+			or model:GetAttribute("DisplayTemplateName")
+				~= template_name
+		)
+	then
+		model:Destroy()
+		model = nil
+	end
+
+	if not model then
+		if not model_library_service
+			or not model_library_service.clone_display_template
+		then
+			return nil
+		end
+
+		model = model_library_service.clone_display_template(
+			template_name,
+			parent
+		)
+		if not model then
+			return nil
+		end
+		model.Name = display_name
+		model:SetAttribute("DisplayRecordId", record_id)
+		model:SetAttribute(
+			"DisplayTemplateName",
+			template_name
+		)
+		prepare_display_model(model)
+	end
+
+	pcall(function()
+		model:ScaleTo(scale)
+	end)
+	model:PivotTo(cframe)
+	set_display_transparency(model, alpha)
+	return model
+end
+
+--[[
+	Renders the player's Master Archive models.
+
+	Args:
+		plot (Model): Assigned plot.
+		masters ({ any }): Stored Master records.
+
+	Returns:
+		None.
+]]
+local function render_master_archive(
+	plot: Model,
+	masters: { any }
+)
+	local plinths: { BasePart } = {}
+	for _, instance in ipairs(plot:GetDescendants()) do
+		if instance:IsA("BasePart")
+			and typeof(
+				instance:GetAttribute("MasterDisplaySlot")
+			) == "number"
+		then
+			table.insert(plinths, instance)
+		end
+	end
+
+	table.sort(plinths, function(left, right)
+		return (left:GetAttribute("MasterDisplaySlot") :: number)
+			< (right:GetAttribute("MasterDisplaySlot") :: number)
+	end)
+
+	for index, plinth in ipairs(plinths) do
+		local record = masters[index]
+		render_record_model(
+			plinth,
+			"ArchiveDisplay",
+			record,
+			plinth.CFrame * CFrame.new(0, 4.2, 0),
+			0.55,
+			0.08
+		)
+	end
+end
+
+--[[
+	Renders unique owned unit templates in the Formation War Room.
+
+	Args:
+		plot (Model): Assigned plot.
+		owned_templates ({ string }): Unique owned template names.
+
+	Returns:
+		None.
+]]
+local function render_war_room_roster(
+	plot: Model,
+	owned_templates: { string }
+)
+	local plinths: { BasePart } = {}
+	for _, instance in ipairs(plot:GetDescendants()) do
+		if instance:IsA("BasePart")
+			and typeof(
+				instance:GetAttribute("UnitDisplaySlot")
+			) == "number"
+		then
+			table.insert(plinths, instance)
+		end
+	end
+
+	table.sort(plinths, function(left, right)
+		return (left:GetAttribute("UnitDisplaySlot") :: number)
+			< (right:GetAttribute("UnitDisplaySlot") :: number)
+	end)
+
+	for index, plinth in ipairs(plinths) do
+		local template_name = owned_templates[index]
+		local record = nil
+		if typeof(template_name) == "string"
+			and template_name ~= ""
+		then
+			record = {
+				record_id = "roster-" .. template_name,
+				template_name = template_name,
+			}
+		end
+
+		render_record_model(
+			plinth,
+			"RosterDisplay",
+			record,
+			plinth.CFrame * CFrame.new(0, 4.4, 0),
+			0.5,
+			0.12
+		)
+	end
+end
+
+--[[
+	Renders Master and in-progress clone models inside cloning chambers.
+
+	Args:
+		plot (Model): Assigned plot.
+		machines ({ any }): Cloning-machine snapshots.
+
+	Returns:
+		None.
+]]
+local function render_clone_chambers(
+	plot: Model,
+	machines: { any }
+)
+	for _, instance in ipairs(plot:GetDescendants()) do
+		if not instance:IsA("BasePart") then
+			continue
+		end
+
+		local index = instance:GetAttribute("MachineIndex")
+		if typeof(index) ~= "number" then
+			continue
+		end
+
+		local machine = machines[index]
+		if typeof(machine) ~= "table" then
+			clear_display(instance, "CloneMasterDisplay")
+			clear_display(instance, "CloneGrowthDisplay")
+			continue
+		end
+
+		local record = machine.master
+		local master_record = if machine.masterId
+			then record
+			else nil
+		render_record_model(
+			instance,
+			"CloneMasterDisplay",
+			master_record,
+			instance.CFrame
+				* CFrame.new(-1.7, -5.7, 0),
+			0.38,
+			0.28
+		)
+
+		local progress = tonumber(machine.cloneProgress) or 0
+		if (tonumber(machine.outputCount) or 0) > 0 then
+			progress = 1
+		end
+		progress = math.clamp(progress, 0, 1)
+
+		local clone_scale = 0.18 + progress * 0.24
+		local clone_alpha = 0.92 - progress * 0.72
+		render_record_model(
+			instance,
+			"CloneGrowthDisplay",
+			record,
+			instance.CFrame
+				* CFrame.new(1.7, -5.7, 0),
+			clone_scale,
+			clone_alpha
+		)
+	end
+end
+
+--[[
+	Clears generated collection models from a released plot.
+
+	Args:
+		plot (Model): Plot being released.
+
+	Returns:
+		None.
+]]
+local function clear_collection_displays(plot: Model)
+	for _, instance in ipairs(plot:GetDescendants()) do
+		if instance:IsA("BasePart") then
+			clear_display(instance, "ArchiveDisplay")
+			clear_display(instance, "RosterDisplay")
+			clear_display(instance, "CloneMasterDisplay")
+			clear_display(instance, "CloneGrowthDisplay")
+		end
+	end
+end
+
+--[[
 	Clears one plot back to its unassigned server state.
 
 	Args:
@@ -487,6 +826,7 @@ local function clear_plot(plot: Model)
 	plot:SetAttribute("PlotOwnerName", "")
 	plot:SetAttribute("PlotOwnerDisplayName", "")
 	plot:SetAttribute("PlotOccupied", false)
+	clear_collection_displays(plot)
 
 	for _, attribute_name in ipairs(UPGRADE_ATTRIBUTES) do
 		plot:SetAttribute(attribute_name, 1)
@@ -650,6 +990,19 @@ local function reset_plot_ownership()
 end
 
 --[[
+	Initializes presentation dependencies.
+
+	Args:
+		model_library_ref (any): Unit template library.
+
+	Returns:
+		None.
+]]
+function PlotService.init(model_library_ref: any)
+	model_library_service = model_library_ref
+end
+
+--[[
 	Starts automatic eight-player Sanctum plot assignment.
 
 	Args:
@@ -714,6 +1067,40 @@ end
 	Returns:
 		CFrame?: Plot spawn transform.
 ]]
+--[[
+	Refreshes physical Master Archive and cloning-chamber models.
+
+	Args:
+		player (Player): Plot owner.
+		snapshot (any): Soul Collection client-style snapshot.
+
+	Returns:
+		boolean: True when the owned plot was updated.
+]]
+function PlotService.refresh_collection_visuals(
+	player: Player,
+	snapshot: any
+): boolean
+	local plot = PlotService.get_plot(player)
+	if not plot or typeof(snapshot) ~= "table" then
+		return false
+	end
+
+	render_master_archive(
+		plot,
+		snapshot.masters or {}
+	)
+	render_war_room_roster(
+		plot,
+		snapshot.ownedTemplates or {}
+	)
+	render_clone_chambers(
+		plot,
+		snapshot.machines or {}
+	)
+	return true
+end
+
 function PlotService.get_spawn_cframe(
 	player: Player
 ): CFrame?
@@ -748,6 +1135,47 @@ function PlotService.owns_instance(
 		return false
 	end
 	return instance:IsDescendantOf(plot)
+end
+
+--[[
+	Checks whether a player is physically near one owned plot station.
+
+	Args:
+		player (Player): Player using the station.
+		station_id (string): BaseStationId to locate.
+		max_distance (number?): Allowed root-to-station distance.
+
+	Returns:
+		boolean: True when the owned station is nearby.
+]]
+function PlotService.is_player_near_station(
+	player: Player,
+	station_id: string,
+	max_distance: number?
+): boolean
+	local plot = PlotService.get_plot(player)
+	if not plot then
+		return false
+	end
+
+	local root = player.Character
+		and player.Character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return false
+	end
+
+	local limit = max_distance or 18
+	for _, instance in ipairs(plot:GetDescendants()) do
+		if instance:IsA("BasePart")
+			and instance:GetAttribute("BaseStationId")
+				== station_id
+		then
+			if (instance.Position - root.Position).Magnitude <= limit then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 --[[

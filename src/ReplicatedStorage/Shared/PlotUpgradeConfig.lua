@@ -10,6 +10,7 @@ local FACILITY_ORDER = {
 	"Formation",
 	"SkillReliquary",
 	"Codex",
+	"SoulCrucible",
 	"MasterGallery",
 	"TrophyHall",
 	"UpgradeForge",
@@ -51,8 +52,15 @@ local DEFINITIONS = {
 			[3] = 190,
 		},
 	},
+	SoulCrucible = {
+		name = "Sacrificial Soul Crucible",
+		costs = {
+			[2] = 100,
+			[3] = 240,
+		},
+	},
 	MasterGallery = {
-		name = "Master Gallery",
+		name = "Master Archive",
 		costs = {
 			[2] = 120,
 			[3] = 300,
@@ -86,10 +94,10 @@ local SKILL_COOLDOWN_BY_LEVEL = {
 	[3] = 0.90,
 }
 
-local DISSOLVE_MULTIPLIER_BY_LEVEL = {
+local SACRIFICE_MULTIPLIER_BY_LEVEL = {
 	[1] = 1,
-	[2] = 1.10,
-	[3] = 1.20,
+	[2] = 1.15,
+	[3] = 1.30,
 }
 
 local MASTER_CAPACITY_BY_LEVEL = {
@@ -295,18 +303,33 @@ function PlotUpgradeConfig.get_skill_cooldown_multiplier(
 end
 
 --[[
-	Returns the Soul Essence dissolve multiplier from Codex level.
+	Returns the Soul Essence multiplier from Soul Crucible level.
 
 	Args:
-		level (number): Necromancer Codex level.
+		level (number): Sacrificial Soul Crucible level.
 
 	Returns:
-		number: Multiplier applied to dissolve yield.
+		number: Multiplier applied to sacrificed-unit Essence.
+]]
+function PlotUpgradeConfig.get_sacrifice_multiplier(
+	level: number
+): number
+	return SACRIFICE_MULTIPLIER_BY_LEVEL[clamp_level(level)]
+end
+
+--[[
+	Legacy alias retained for older callers during migration.
+
+	Args:
+		level (number): Sacrificial Soul Crucible level.
+
+	Returns:
+		number: Multiplier applied to sacrificed-unit Essence.
 ]]
 function PlotUpgradeConfig.get_dissolve_multiplier(
 	level: number
 ): number
-	return DISSOLVE_MULTIPLIER_BY_LEVEL[clamp_level(level)]
+	return PlotUpgradeConfig.get_sacrifice_multiplier(level)
 end
 
 --[[
@@ -375,14 +398,21 @@ function PlotUpgradeConfig.get_effect_text(
 			reduction
 		)
 	elseif facility_id == "Codex" then
+		if safe_level == 1 then
+			return "Codex bonuses through 5 Raises"
+		elseif safe_level == 2 then
+			return "Codex bonuses through 30 Raises"
+		end
+		return "All Codex Raise milestones unlocked"
+	elseif facility_id == "SoulCrucible" then
 		local multiplier =
-			PlotUpgradeConfig.get_dissolve_multiplier(
+			PlotUpgradeConfig.get_sacrifice_multiplier(
 				safe_level
 			)
 		local bonus = math.floor(
 			(multiplier - 1) * 100 + 0.5
 		)
-		return ("%d%% extra dissolve Essence"):format(bonus)
+		return ("%d%% sacrifice Essence bonus"):format(bonus)
 	elseif facility_id == "MasterGallery" then
 		return ("%d stored Masters"):format(
 			PlotUpgradeConfig.get_master_capacity(safe_level)

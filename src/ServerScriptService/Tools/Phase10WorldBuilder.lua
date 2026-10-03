@@ -1186,18 +1186,16 @@ local function add_master_plinths(
 	station_cf: CFrame,
 	plot_index: number
 )
-	for index = 1, 6 do
-		local angle = (math.pi * 2 / 6) * index
-		local offset = Vector3.new(
-			math.cos(angle) * 18,
-			2,
-			math.sin(angle) * 18
-		)
+	for index = 1, 14 do
+		local column = ((index - 1) % 7) + 1
+		local row = math.floor((index - 1) / 7) + 1
+		local x = (column - 4) * 8
+		local z = if row == 1 then -15 else 15
 		local plinth = make_part(
 			parent,
 			("MasterPlinth%d"):format(index),
-			Vector3.new(8, 4, 8),
-			station_cf * CFrame.new(offset),
+			Vector3.new(6, 4, 6),
+			station_cf * CFrame.new(x, 2, z),
 			Color3.fromRGB(88, 74, 96),
 			Enum.Material.Marble,
 			true
@@ -1223,18 +1221,16 @@ local function add_unit_plinths(
 	station_cf: CFrame,
 	plot_index: number
 )
-	for index = 1, 6 do
-		local angle = (math.pi * 2 / 6) * index + 0.52
-		local offset = Vector3.new(
-			math.cos(angle) * 26,
-			1.5,
-			math.sin(angle) * 26
-		)
+	for index = 1, 8 do
+		local column = ((index - 1) % 4) + 1
+		local row = math.floor((index - 1) / 4) + 1
+		local x = (column - 2.5) * 10
+		local z = if row == 1 then -13 else 13
 		local plinth = make_part(
 			parent,
 			("UnitPlinth%d"):format(index),
 			Vector3.new(6, 3, 6),
-			station_cf * CFrame.new(offset),
+			station_cf * CFrame.new(x, 1.5, z),
 			Color3.fromRGB(66, 71, 79),
 			Enum.Material.Slate,
 			true
@@ -1295,6 +1291,7 @@ local function set_plot_upgrade_defaults(plot: Model)
 		FormationLevel = 1,
 		SkillReliquaryLevel = 1,
 		CodexLevel = 1,
+		SoulCrucibleLevel = 1,
 		MasterGalleryLevel = 1,
 		TrophyHallLevel = 1,
 		UpgradeForgeLevel = 1,
@@ -1350,6 +1347,7 @@ local function build_plot_facilities(
 	local formation_cf = surface_cf * CFrame.new(-65, 0, -43)
 	local skills_cf = surface_cf * CFrame.new(65, 0, -43)
 	local codex_cf = surface_cf * CFrame.new(-84, 0, 12)
+	local crucible_cf = surface_cf * CFrame.new(0, 0, -82)
 	local forge_cf = surface_cf * CFrame.new(84, 0, 12)
 	local master_cf = surface_cf * CFrame.new(-82, 0, 77)
 	local trophy_cf = surface_cf * CFrame.new(82, 0, 77)
@@ -1366,7 +1364,7 @@ local function build_plot_facilities(
 	)
 	add_clone_chambers(soul, soul_cf, plot_index)
 
-	make_station(
+	local war_room = make_station(
 		facilities,
 		"Formation War Room",
 		formation_cf,
@@ -1375,6 +1373,11 @@ local function build_plot_facilities(
 		plot_index,
 		44,
 		"FormationLevel"
+	)
+	add_unit_plinths(
+		war_room,
+		formation_cf,
+		plot_index
 	)
 	make_station(
 		facilities,
@@ -1397,9 +1400,20 @@ local function build_plot_facilities(
 		"CodexLevel"
 	)
 
+	make_station(
+		facilities,
+		"Sacrificial Soul Crucible",
+		crucible_cf,
+		Color3.fromRGB(126, 48, 58),
+		"SoulCrucible",
+		plot_index,
+		38,
+		"SoulCrucibleLevel"
+	)
+
 	local gallery = make_station(
 		facilities,
-		"Master Gallery",
+		"Master Archive",
 		master_cf,
 		Color3.fromRGB(150, 112, 174),
 		"Masters",
@@ -1408,7 +1422,6 @@ local function build_plot_facilities(
 		"MasterGalleryLevel"
 	)
 	add_master_plinths(gallery, master_cf, plot_index)
-	add_unit_plinths(gallery, master_cf, plot_index)
 
 	local trophy_hall = make_station(
 		facilities,
