@@ -213,8 +213,13 @@ local function apply_station_visual(
 	local label = billboard
 		and billboard:FindFirstChildOfClass("TextLabel")
 	if label and label:IsA("TextLabel") then
-		label.Text = ("%s\nLEVEL %d"):format(
+		local purpose = station:GetAttribute("FacilityPurpose")
+		local purpose_text = if typeof(purpose) == "string"
+			then purpose
+			else "OPEN FACILITY"
+		label.Text = ("%s\n%s\nLEVEL %d"):format(
 			station.Name,
+			purpose_text,
 			level
 		)
 	end
@@ -394,13 +399,24 @@ local function apply_player_progression(
 			end
 
 			local machine_index =
-				instance:GetAttribute("MachineIndex")
+				instance:GetAttribute("MachineVisualIndex")
 			if typeof(machine_index) == "number" then
 				local unlocked = machine_index <= foundry_level
+				local base_alpha = instance:GetAttribute(
+					"MachineBaseTransparency"
+				)
+				if typeof(base_alpha) ~= "number" then
+					base_alpha = instance.Transparency
+				end
 				instance.Transparency = if unlocked
-					then 0.38
-					else 0.86
+					then base_alpha
+					else math.max(base_alpha, 0.86)
+
+				local base_collision = instance:GetAttribute(
+					"MachineBaseCanCollide"
+				)
 				instance.CanCollide = unlocked
+					and base_collision == true
 			end
 
 			local trophy_index =
@@ -762,9 +778,9 @@ local function render_clone_chambers(
 			"CloneMasterDisplay",
 			master_record,
 			instance.CFrame
-				* CFrame.new(-1.7, -5.7, 0),
-			0.38,
-			0.28
+				* CFrame.new(-4.5, -6, 0),
+			0.42,
+			0.20
 		)
 
 		local progress = tonumber(machine.cloneProgress) or 0
@@ -773,14 +789,14 @@ local function render_clone_chambers(
 		end
 		progress = math.clamp(progress, 0, 1)
 
-		local clone_scale = 0.18 + progress * 0.24
-		local clone_alpha = 0.92 - progress * 0.72
+		local clone_scale = 0.16 + progress * 0.28
+		local clone_alpha = 0.88 - progress * 0.72
 		render_record_model(
 			instance,
 			"CloneGrowthDisplay",
 			record,
 			instance.CFrame
-				* CFrame.new(1.7, -5.7, 0),
+				* CFrame.new(4.5, -6, 0),
 			clone_scale,
 			clone_alpha
 		)
@@ -847,13 +863,24 @@ local function clear_plot(plot: Model)
 			end
 
 			local machine_index =
-				instance:GetAttribute("MachineIndex")
+				instance:GetAttribute("MachineVisualIndex")
 			if typeof(machine_index) == "number" then
 				local unlocked = machine_index <= 1
+				local base_alpha = instance:GetAttribute(
+					"MachineBaseTransparency"
+				)
+				if typeof(base_alpha) ~= "number" then
+					base_alpha = instance.Transparency
+				end
 				instance.Transparency = if unlocked
-					then 0.38
-					else 0.86
+					then base_alpha
+					else math.max(base_alpha, 0.86)
+
+				local base_collision = instance:GetAttribute(
+					"MachineBaseCanCollide"
+				)
 				instance.CanCollide = unlocked
+					and base_collision == true
 			end
 
 			local trophy_index =
