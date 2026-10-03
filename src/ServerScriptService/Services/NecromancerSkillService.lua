@@ -653,10 +653,21 @@ function NecromancerSkillService.cast_skill(
 		return false, message, nil
 	end
 
+	local cooldown_multiplier =
+		player:GetAttribute("SkillCooldownMultiplier")
+	if typeof(cooldown_multiplier) ~= "number" then
+		cooldown_multiplier = 1
+	end
+	cooldown_multiplier = math.clamp(
+		cooldown_multiplier,
+		0.5,
+		1
+	)
+
 	local ready_at = start_cooldown(
 		player,
 		skill_id,
-		definition.cooldown
+		definition.cooldown * cooldown_multiplier
 	)
 	return true, message, ready_at
 end

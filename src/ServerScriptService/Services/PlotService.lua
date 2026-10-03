@@ -1,8 +1,14 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+
+local PlotUpgradeConfig = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("PlotUpgradeConfig")
+)
 
 local PlotService = {}
 
@@ -10,7 +16,21 @@ local PLOTS_FOLDER_NAME = "Bases"
 local SAFE_ZONE_MODEL_NAME = "SafeZoneWorld"
 local MAX_PLOTS = 8
 
+local UPGRADE_ATTRIBUTES = {
+	"PlotLevel",
+	"SoulFoundryLevel",
+	"FormationLevel",
+	"SkillReliquaryLevel",
+	"CodexLevel",
+	"MasterGalleryLevel",
+	"TrophyHallLevel",
+	"UpgradeForgeLevel",
+}
+
 local assigned_plot_by_user_id: { [number]: Model } = {}
+local connections_by_user_id: {
+	[number]: { RBXScriptConnection },
+} = {}
 local did_start = false
 
 --[[
@@ -109,8 +129,12 @@ local function update_owner_sign(
 		plot:GetAttribute("PlotIndex")
 	) or 0
 	if display_name and display_name ~= "" then
-		label.Text = ("PLOT %02d\n%s"):format(
+		local plot_level = tonumber(
+			plot:GetAttribute("PlotLevel")
+		) or 1
+		label.Text = ("PLOT %02d • LV %d\n%s"):format(
 			plot_index,
+			plot_level,
 			display_name
 		)
 	else
@@ -118,6 +142,330 @@ local function update_owner_sign(
 			plot_index
 		)
 	end
+end
+
+--[[
+	Creates one lightweight visual upgrade part.
+
+	Args:
+		parent (Instance): Visual folder receiving the part.
+		name (string): Part name.
+		size (Vector3): Part dimensions.
+		cframe (CFrame): World transform.
+		color (Color3): Part colour.
+		material (Enum.Material): Part material.
+
+	Returns:
+		Part: Created non-colliding anchored part.
+]]
+local function make_upgrade_part(
+	parent: Instance,
+	name: string,
+	size: Vector3,
+	cframe: CFrame,
+	color: Color3,
+	material: Enum.Material
+): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Size = size
+	part.CFrame = cframe
+	part.Color = color
+	part.Material = material
+	part.Parent = parent
+	return part
+end
+
+--[[
+	Rebuilds visible progression details for one facility.
+
+	Level two adds twin ritual pylons. Level three adds a glowing crest over
+	the station canopy. These are replicated, so visitors can see another
+	player's upgraded plot without being able to use it.
+
+	Args:
+		station (Model): Physical facility model.
+		level (number): Facility level.
+
+	Returns:
+		None.
+]]
+local function apply_station_visual(
+	station: Model,
+	level: number
+)
+	local existing = station:FindFirstChild("ProgressionVisuals")
+	if existing then
+		existing:Destroy()
+	end
+
+	station:SetAttribute("FacilityLevel", level)
+
+	local anchor = station:FindFirstChild("StationLabel")
+	local billboard = anchor and anchor:FindFirstChild("Label")
+	local label = billboard
+		and billboard:FindFirstChildOfClass("TextLabel")
+	if label and label:IsA("TextLabel") then
+		label.Text = ("%s\nLEVEL %d"):format(
+			station.Name,
+			level
+		)
+	end
+
+	if level <= 1 then
+		return
+	end
+
+	local canopy = station:FindFirstChild("StationCanopy")
+	if not (canopy and canopy:IsA("BasePart")) then
+		return
+	end
+
+	local visuals = Instance.new("Folder")
+	visuals.Name = "ProgressionVisuals"
+	visuals.Parent = station
+
+	local offset = canopy.Size.X * 0.34
+	local pylon_color = Color3.fromRGB(139, 105, 61)
+	for _, x in ipairs({ -offset, offset }) do
+		make_upgrade_part(
+			visuals,
+			"RitualPylon",
+			Vector3.new(2.5, 10, 2.5),
+			canopy.CFrame * CFrame.new(x, 5, 0),
+			pylon_color,
+			Enum.Material.Slate
+		)
+	end
+
+	if level < 3 then
+		return
+	end
+
+	local crest = make_upgrade_part(
+		visuals,
+		"AscendantCrest",
+		Vector3.new(canopy.Size.X * 0.62, 1.5, 2),
+		canopy.CFrame * CFrame.new(0, 8.5, 0),
+		Color3.fromRGB(171, 116, 220),
+		Enum.Material.Neon
+	)
+	local light = Instance.new("PointLight")
+	light.Color = crest.Color
+	light.Brightness = 1.2
+	light.Range = 20
+	light.Parent = crest
+end
+
+--[[
+	Rebuilds visible Plot-level progression details.
+
+	Args:
+		plot (Model): Assigned player plot.
+		level (number): Plot level.
+
+	Returns:
+		None.
+]]
+local function apply_plot_visual(
+	plot: Model,
+	level: number
+)
+	local existing = plot:FindFirstChild("PlotProgressionVisuals")
+	if existing then
+		existing:Destroy()
+	end
+	if level <= 1 then
+		return
+	end
+
+	local floor = plot:FindFirstChild("Plot")
+	if not (floor and floor:IsA("BasePart")) then
+		return
+	end
+
+	local visuals = Instance.new("Folder")
+	visuals.Name = "PlotProgressionVisuals"
+	visuals.Parent = plot
+
+	local front_z = -(floor.Size.Z * 0.5 - 14)
+	local side_x = floor.Size.X * 0.5 - 22
+	local height = if level >= 3 then 22 else 15
+	for _, x in ipairs({ -side_x, side_x }) do
+		make_upgrade_part(
+			visuals,
+			"PlotStandard",
+			Vector3.new(3, height, 3),
+			floor.CFrame * CFrame.new(
+				x,
+				floor.Size.Y * 0.5 + height * 0.5,
+				front_z
+			),
+			Color3.fromRGB(96, 72, 49),
+			Enum.Material.Wood
+		)
+	end
+
+	if level >= 3 then
+		make_upgrade_part(
+			visuals,
+			"PlotCrest",
+			Vector3.new(30, 2, 3),
+			floor.CFrame * CFrame.new(
+				0,
+				floor.Size.Y * 0.5 + 20,
+				front_z
+			),
+			Color3.fromRGB(171, 116, 220),
+			Enum.Material.Neon
+		)
+	end
+end
+
+--[[
+	Applies one player's persisted progression to their assigned plot.
+
+	Args:
+		player (Player): Plot owner.
+		plot (Model): Assigned plot.
+
+	Returns:
+		None.
+]]
+local function apply_player_progression(
+	player: Player,
+	plot: Model
+)
+	for _, attribute_name in ipairs(UPGRADE_ATTRIBUTES) do
+		local value = player:GetAttribute(attribute_name)
+		local level = if typeof(value) == "number"
+			then math.clamp(math.floor(value), 1, 3)
+			else 1
+		plot:SetAttribute(attribute_name, level)
+	end
+
+	apply_plot_visual(
+		plot,
+		plot:GetAttribute("PlotLevel") :: number
+	)
+
+	local facilities = plot:FindFirstChild("Phase10Facilities")
+	if facilities then
+		for _, child in ipairs(facilities:GetChildren()) do
+			if not child:IsA("Model") then
+				continue
+			end
+			local upgrade_key =
+				child:GetAttribute("PlotUpgradeKey")
+			if typeof(upgrade_key) ~= "string" then
+				continue
+			end
+			local level = plot:GetAttribute(upgrade_key)
+			if typeof(level) ~= "number" then
+				level = 1
+			end
+			apply_station_visual(child, level)
+		end
+	end
+
+	local foundry_level = plot:GetAttribute("SoulFoundryLevel")
+	if typeof(foundry_level) ~= "number" then
+		foundry_level = 1
+	end
+
+	local trophy_level = plot:GetAttribute("TrophyHallLevel")
+	if typeof(trophy_level) ~= "number" then
+		trophy_level = 1
+	end
+	local trophy_slots =
+		PlotUpgradeConfig.get_trophy_slots(trophy_level)
+
+	if facilities then
+		for _, instance in ipairs(facilities:GetDescendants()) do
+			if not instance:IsA("BasePart") then
+				continue
+			end
+
+			local machine_index =
+				instance:GetAttribute("MachineIndex")
+			if typeof(machine_index) == "number" then
+				local unlocked = machine_index <= foundry_level
+				instance.Transparency = if unlocked
+					then 0.38
+					else 0.86
+				instance.CanCollide = unlocked
+			end
+
+			local trophy_index =
+				instance:GetAttribute("BossTrophySlot")
+			if typeof(trophy_index) == "number" then
+				local unlocked = trophy_index <= trophy_slots
+				instance.Transparency = if unlocked
+					then 0
+					else 0.72
+				instance.CanCollide = unlocked
+			end
+		end
+	end
+
+	update_owner_sign(plot, player.DisplayName)
+end
+
+--[[
+	Disconnects progression listeners for one user.
+
+	Args:
+		user_id (number): User ID whose listeners should be removed.
+
+	Returns:
+		None.
+]]
+local function disconnect_player_connections(user_id: number)
+	local connections = connections_by_user_id[user_id]
+	if not connections then
+		return
+	end
+	for _, connection in ipairs(connections) do
+		connection:Disconnect()
+	end
+	connections_by_user_id[user_id] = nil
+end
+
+--[[
+	Connects plot progression attributes for one assigned player.
+
+	Args:
+		player (Player): Assigned player.
+		plot (Model): Assigned plot.
+
+	Returns:
+		None.
+]]
+local function connect_player_progression(
+	player: Player,
+	plot: Model
+)
+	disconnect_player_connections(player.UserId)
+
+	local connections: { RBXScriptConnection } = {}
+	for _, attribute_name in ipairs(UPGRADE_ATTRIBUTES) do
+		table.insert(
+			connections,
+			player:GetAttributeChangedSignal(
+				attribute_name
+			):Connect(function()
+				if player.Parent and plot.Parent then
+					apply_player_progression(player, plot)
+				end
+			end)
+		)
+	end
+	connections_by_user_id[player.UserId] = connections
+	apply_player_progression(player, plot)
 end
 
 --[[
@@ -139,6 +487,47 @@ local function clear_plot(plot: Model)
 	plot:SetAttribute("PlotOwnerName", "")
 	plot:SetAttribute("PlotOwnerDisplayName", "")
 	plot:SetAttribute("PlotOccupied", false)
+
+	for _, attribute_name in ipairs(UPGRADE_ATTRIBUTES) do
+		plot:SetAttribute(attribute_name, 1)
+	end
+	apply_plot_visual(plot, 1)
+
+	local facilities = plot:FindFirstChild("Phase10Facilities")
+	if facilities then
+		for _, child in ipairs(facilities:GetChildren()) do
+			if child:IsA("Model") then
+				apply_station_visual(child, 1)
+			end
+		end
+
+		for _, instance in ipairs(facilities:GetDescendants()) do
+			if not instance:IsA("BasePart") then
+				continue
+			end
+
+			local machine_index =
+				instance:GetAttribute("MachineIndex")
+			if typeof(machine_index) == "number" then
+				local unlocked = machine_index <= 1
+				instance.Transparency = if unlocked
+					then 0.38
+					else 0.86
+				instance.CanCollide = unlocked
+			end
+
+			local trophy_index =
+				instance:GetAttribute("BossTrophySlot")
+			if typeof(trophy_index) == "number" then
+				local unlocked = trophy_index <= 4
+				instance.Transparency = if unlocked
+					then 0
+					else 0.72
+				instance.CanCollide = unlocked
+			end
+		end
+	end
+
 	update_owner_sign(plot, nil)
 end
 
@@ -221,6 +610,7 @@ local function assign_player(player: Player): Model?
 	) or 0
 	player:SetAttribute("SanctumPlotIndex", plot_index)
 	player:SetAttribute("SanctumPlotName", plot.Name)
+	connect_player_progression(player, plot)
 	return plot
 end
 
@@ -234,6 +624,8 @@ end
 		None.
 ]]
 local function release_player(player: Player)
+	disconnect_player_connections(player.UserId)
+
 	local plot = assigned_plot_by_user_id[player.UserId]
 	if plot then
 		clear_plot(plot)

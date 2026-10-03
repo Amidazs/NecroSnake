@@ -873,7 +873,8 @@ Work:
   Skill Reliquary, Necromancer Codex, Master Gallery, Boss Trophy Hall and
   Foundry Upgrade Forge.
 - Every plot contains three clone chambers, six Master display slots, six
-  normal-unit display slots and four boss-trophy slots.
+  normal-unit display slots and eight boss-trophy plinths. Trophy Hall
+  progression unlocks 4 / 6 / 8 of those plinths at levels 1 / 2 / 3.
 - The old communal Phase10Facilities district has been removed.
 - Plot signs publicly show the assigned player's display name while the
   server owns the authoritative assignment.
@@ -888,11 +889,27 @@ Work:
   another player's plot.
 - The Sanctum safe-zone volume now covers the complete eight-plot ring,
   including each plot's outer edge.
-- Physical upgrade metadata now exists for Plot, Soul Foundry, Formation,
-  Skill Reliquary, Codex, Master Gallery, Trophy Hall and Upgrade Forge.
-  These begin at level 1 and provide the structural hook for the next
-  upgrade-progression pass; costs and gameplay effects are not yet
-  implemented.
+- Plot progression is now implemented and persisted in the existing Soul
+  profile. Plot, Soul Foundry, Formation, Skill Reliquary, Codex, Master
+  Gallery, Trophy Hall and Upgrade Forge each progress from level 1 to 3.
+- Soul Essence is the single upgrade currency. Plot level caps every other
+  facility, while Upgrade Forge levels discount later facility and cloning
+  machine purchases by 5% / 10%.
+- Soul Foundry levels unlock one / two / three cloning machines.
+- Formation levels extend whole-army command range from 120 to 140 / 160
+  studs.
+- Skill Reliquary levels reduce equipped Necromancer skill cooldowns by
+  5% / 10%.
+- Codex levels improve Soul Essence recovered when dissolving units by
+  10% / 20%.
+- Master Gallery levels raise safe Master storage from 6 to 10 / 14.
+- Trophy Hall levels unlock 4 / 6 / 8 physical boss trophy displays.
+- Facility upgrades now visibly change the assigned plot. Level 2 adds
+  ritual pylons; level 3 adds Ascendant crests, while Plot levels add
+  upgraded entrance standards and a level-3 plot crest.
+- The permanent Foundry HUD shortcut and its old upgrade buttons are
+  removed. Foundry access remains physical, while all facility and cloning
+  machine upgrades now live at the player's Foundry Upgrade Forge.
 - Acceptance filled plots 2-8 after the live player occupied Plot 1,
   rejected a ninth claim, released Plot 5 and successfully reused Plot 5.
 - Final runtime acceptance returned the player to Plot 1, verified all
@@ -902,6 +919,24 @@ Work:
   second Studio session. It retained all eight plots, 56 stations and 56
   prompts, then passed the same assignment, retreat and prompt-ownership
   runtime checks without runtime errors.
+- Upgrade acceptance bought the complete three-tier progression with Soul
+  Essence and verified 160-stud command range, 10% cooldown reduction,
+  20% dissolve bonus, 14-Master storage, 8 Trophy slots, 10% Forge
+  discount, three Foundry machines and a discounted machine upgrade.
+- The physical progression acceptance verified all seven level-3 facility
+  crests and the level-3 Plot crest on the assigned plot.
+- Live-client acceptance opened the Forge from its physical prompt,
+  rendered eight facility rows plus the current machine rows, kept only
+  the owner's prompts active and confirmed the old Foundry HUD upgrade
+  controls remain hidden.
+- The live production service correctly rejected an unaffordable level-2
+  Plot purchase at the 60-Essence starting balance with
+  "Need 150 Soul Essence." and left the profile unchanged.
+- A fresh copy of the saved canonical place was independently reopened
+  after the upgrade pass. It retained all eight plots, 56 facilities, 64
+  Trophy plinths, the upgrade modules and persisted-profile schema, then
+  completed a clean production play where the physical Forge opened with
+  eight facility rows plus the current machine row and no runtime errors.
 
 ## Phase 12 - Polish, onboarding, analytics and launch preparation
 
@@ -935,22 +970,19 @@ Key analytics:
 
 ## Immediate next milestone
 
-**Complete Sanctum plot progression before beginning Phase 12 polish.**
+**Begin Phase 12: Polish, onboarding, analytics and launch preparation.**
 
-The eight-player plot architecture is accepted GREEN. The physical Base
-systems have moved out of the communal Sanctum UI/district and into the
-player's assigned plot. The next pre-Phase-12 slice is to make those
-physical facilities genuinely upgradeable and use them to remove
-redundant menu UI.
+The eight-player Sanctum plot architecture and its three-tier physical
+progression are accepted GREEN. Plot ownership, facility upgrades, Forge
+purchases, gameplay effects and physical progression are now integrated
+with the existing Soul Essence economy and Soul profile.
 
-The next slice is:
-1. Define what each Plot and facility level unlocks or improves.
-2. Define upgrade currencies, costs, prerequisites and sensible caps.
-3. Persist every facility's upgrade level per player.
-4. Make upgrades visibly alter the player's physical plot/buildings.
-5. Move upgrade actions to the Foundry Upgrade Forge.
-6. Remove or simplify UI that is now represented physically in the plot.
-7. Playtest upgrade persistence, ownership and multiplayer plot visits.
-
-After that, continue Phase 12 with HUD consolidation, mobile/controller
-support, onboarding, polish, analytics and launch preparation.
+The first Phase 12 slice is:
+1. Consolidate the final HUD around the physical Sanctum interactions.
+2. Complete mobile and controller support for combat, Base and social UI.
+3. Build the short first-session tutorial and onboarding flow.
+4. Polish audio, music, resurrection/death/boss VFX and accessibility.
+5. Add performance settings and the agreed analytics funnel.
+6. Run soft-launch balance and retention instrumentation checks.
+7. In a published test place, smoke-test the Phase 11 reserved-server and
+   Join Friend cross-server network branches before launch.

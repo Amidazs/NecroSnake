@@ -1260,13 +1260,15 @@ local function add_trophy_plinths(
 	station_cf: CFrame,
 	plot_index: number
 )
-	for index = 1, 4 do
-		local x = if index % 2 == 0 then 15 else -15
-		local z = if index <= 2 then -12 else 12
+	for index = 1, 8 do
+		local column = ((index - 1) % 4) + 1
+		local row = math.floor((index - 1) / 4) + 1
+		local x = (column - 2.5) * 12
+		local z = if row == 1 then -12 else 12
 		local plinth = make_part(
 			parent,
 			("BossTrophyPlinth%d"):format(index),
-			Vector3.new(10, 5, 10),
+			Vector3.new(9, 5, 9),
 			station_cf * CFrame.new(x, 3.5, z),
 			Color3.fromRGB(111, 87, 54),
 			Enum.Material.Marble,

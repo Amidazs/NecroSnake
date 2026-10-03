@@ -130,6 +130,7 @@ local function create_gui()
 	icon.TextSize = 28
 	icon.TextColor3 = Color3.fromRGB(218, 180, 255)
 	icon.Font = Enum.Font.GothamBold
+	icon.Visible = false
 	icon.Parent = gui
 	make_corner(icon, 12)
 	make_stroke(icon, 0.2)
@@ -148,7 +149,15 @@ local function create_gui()
 
 	local title = make_label(panel, "Soul Foundry", 22, true)
 	title.Position = UDim2.fromOffset(16, 12)
-	title.Size = UDim2.new(1, -32, 0, 26)
+	title.Size = UDim2.new(1, -82, 0, 26)
+
+	local close = make_button(panel, "X", 36)
+	close.Name = "Close"
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -16, 0, 12)
+	close.MouseButton1Click:Connect(function()
+		panel.Visible = false
+	end)
 
 	local summary = make_label(panel, "", 13, false)
 	summary.Name = "Summary"
@@ -179,8 +188,10 @@ local function create_gui()
 		button.Name = tab_name .. "Tab"
 	end
 
-	local base_upgrade = make_button(panel, "Upgrade Foundry", 142)
+	local base_upgrade = make_button(panel, "Upgrade at Forge", 142)
 	base_upgrade.Name = "BaseUpgrade"
+	base_upgrade.Visible = false
+	base_upgrade.Active = false
 	base_upgrade.AnchorPoint = Vector2.new(1, 0)
 	base_upgrade.Position = UDim2.new(1, -16, 0, 12)
 
@@ -415,18 +426,15 @@ local function render_machine_buttons(
 		})
 	end)
 
-	local upgrade_text = if machine.upgradeCost
-		then ("Upgrade %d"):format(machine.upgradeCost)
-		else "Max Level"
-	local upgrade = make_button(row, upgrade_text, 96)
-	upgrade.Position = UDim2.new(1, -104, 0, 57)
-	upgrade.MouseButton1Click:Connect(function()
-		if machine.upgradeCost then
-			send_action("UPGRADE_MACHINE", {
-				machineId = machine.machineId,
-			})
-		end
-	end)
+	local forge_note = make_label(
+		row,
+		"Upgrade at your Foundry Upgrade Forge",
+		10,
+		false
+	)
+	forge_note.Position = UDim2.new(1, -260, 0, 82)
+	forge_note.Size = UDim2.fromOffset(248, 16)
+	forge_note.TextColor3 = Color3.fromRGB(142, 130, 153)
 end
 
 local function render_machines(snapshot: SoulSnapshot)
@@ -525,16 +533,11 @@ for _, tab_name in ipairs({ "Vault", "Masters", "Machines" }) do
 end
 
 base_upgrade.MouseButton1Click:Connect(function()
-	if latest_snapshot and latest_snapshot.baseUpgradeCost then
-		send_action("UPGRADE_BASE")
-	end
+	-- Upgrade purchases live at the physical Upgrade Forge.
 end)
 
 icon.MouseButton1Click:Connect(function()
-	panel.Visible = not panel.Visible
-	if panel.Visible then
-		send_action("REQUEST")
-	end
+	-- The Foundry no longer exposes a permanent HUD shortcut.
 end)
 
 local function update_zone_visibility()
@@ -543,8 +546,8 @@ local function update_zone_visibility()
 	local loaded =
 		LOCAL_PLAYER:GetAttribute("SoulProfileLoaded") == true
 
-	icon.Visible = in_safe_zone and loaded
-	if not icon.Visible then
+	icon.Visible = false
+	if not in_safe_zone or not loaded then
 		panel.Visible = false
 	end
 end

@@ -12,6 +12,7 @@ local player = Players.LocalPlayer
 local player_gui = player:WaitForChild("PlayerGui")
 
 local INFO_GUI_NAME = "NecroBaseInfoGui"
+local UPGRADE_GUI_NAME = "NecroPlotUpgradeGui"
 local PERSONAL_LABEL_NAME = "PersonalBaseDisplay"
 local BOSS_TEMPLATES = {
 	GraveBaron = true,
@@ -346,12 +347,27 @@ end
 		None.
 ]]
 local function render_trophies(snapshot: any)
-	render_record_plinths(
-		"BossTrophySlot",
-		get_boss_records(snapshot),
-		"Unclaimed Trophy",
-		Color3.fromRGB(224, 181, 96)
-	)
+	local bosses = get_boss_records(snapshot)
+	local unlocked = tonumber(
+		player:GetAttribute("BossTrophySlots")
+	) or 4
+
+	for index, plinth in ipairs(
+		get_plinths("BossTrophySlot")
+	) do
+		local text = "Locked Trophy Display"
+		local color = Color3.fromRGB(117, 108, 123)
+
+		if index <= unlocked then
+			local record = bosses[index]
+			text = if record
+				then record_name(record)
+				else "Unclaimed Trophy"
+			color = Color3.fromRGB(224, 181, 96)
+		end
+
+		set_plinth_label(plinth, text, color)
+	end
 end
 
 --[[
@@ -624,6 +640,363 @@ local function get_info_gui(): (
 end
 
 --[[
+	Creates a text label used by the physical Upgrade Forge UI.
+
+	Args:
+		parent (Instance): Label parent.
+		text (string): Initial text.
+		size (number): Text size.
+		bold (boolean): Whether to use the bold font.
+
+	Returns:
+		TextLabel: Created label.
+]]
+local function make_upgrade_label(
+	parent: Instance,
+	text: string,
+	size: number,
+	bold: boolean
+): TextLabel
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.BorderSizePixel = 0
+	label.Font = if bold
+		then Enum.Font.GothamBold
+		else Enum.Font.Gotham
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(232, 223, 242)
+	label.TextSize = size
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+	return label
+end
+
+--[[
+	Creates a button used by the physical Upgrade Forge UI.
+
+	Args:
+		parent (Instance): Button parent.
+		text (string): Button text.
+
+	Returns:
+		TextButton: Created button.
+]]
+local function make_upgrade_button(
+	parent: Instance,
+	text: string
+): TextButton
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(118, 32)
+	button.BackgroundColor3 = Color3.fromRGB(41, 31, 49)
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(239, 219, 255)
+	button.TextSize = 12
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 7)
+	corner.Parent = button
+	return button
+end
+
+--[[
+	Creates or retrieves the Upgrade Forge GUI.
+
+	Args:
+		None.
+
+	Returns:
+		ScreenGui: Upgrade Forge GUI.
+		Frame: Main panel.
+		TextLabel: Essence/discount summary.
+		TextLabel: Result/status label.
+		ScrollingFrame: Upgrade rows container.
+]]
+local function get_upgrade_gui(): (
+	ScreenGui,
+	Frame,
+	TextLabel,
+	TextLabel,
+	ScrollingFrame
+)
+	local existing = player_gui:FindFirstChild(UPGRADE_GUI_NAME)
+	if existing and existing:IsA("ScreenGui") then
+		local panel = existing:FindFirstChild("Panel")
+		if panel and panel:IsA("Frame") then
+			local summary = panel:FindFirstChild("Summary")
+			local status = panel:FindFirstChild("Status")
+			local content = panel:FindFirstChild("Content")
+			if summary and summary:IsA("TextLabel")
+				and status and status:IsA("TextLabel")
+				and content
+				and content:IsA("ScrollingFrame")
+			then
+				return existing, panel, summary, status, content
+			end
+		end
+		existing:Destroy()
+	end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = UPGRADE_GUI_NAME
+	gui.ResetOnSpawn = false
+	gui.Parent = player_gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(640, 560)
+	panel.BackgroundColor3 = Color3.fromRGB(14, 11, 18)
+	panel.BorderSizePixel = 0
+	panel.Visible = false
+	panel.Parent = gui
+
+	local panel_corner = Instance.new("UICorner")
+	panel_corner.CornerRadius = UDim.new(0, 12)
+	panel_corner.Parent = panel
+
+	local title = make_upgrade_label(
+		panel,
+		"Foundry Upgrade Forge",
+		22,
+		true
+	)
+	title.Position = UDim2.fromOffset(18, 14)
+	title.Size = UDim2.new(1, -80, 0, 28)
+
+	local summary = make_upgrade_label(panel, "", 13, false)
+	summary.Name = "Summary"
+	summary.Position = UDim2.fromOffset(18, 48)
+	summary.Size = UDim2.new(1, -36, 0, 20)
+	summary.TextColor3 = Color3.fromRGB(194, 174, 211)
+
+	local status = make_upgrade_label(panel, "", 12, false)
+	status.Name = "Status"
+	status.Position = UDim2.fromOffset(18, 72)
+	status.Size = UDim2.new(1, -36, 0, 20)
+	status.TextColor3 = Color3.fromRGB(222, 193, 146)
+
+	local close = make_upgrade_button(panel, "X")
+	close.Name = "Close"
+	close.Size = UDim2.fromOffset(36, 30)
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -14, 0, 14)
+	close.Activated:Connect(function()
+		panel.Visible = false
+	end)
+
+	local content = Instance.new("ScrollingFrame")
+	content.Name = "Content"
+	content.Position = UDim2.fromOffset(18, 104)
+	content.Size = UDim2.new(1, -36, 1, -122)
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel = 0
+	content.ScrollBarThickness = 6
+	content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	content.CanvasSize = UDim2.fromOffset(0, 0)
+	content.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = content
+
+	return gui, panel, summary, status, content
+end
+
+--[[
+	Removes rendered Upgrade Forge rows while preserving its layout.
+
+	Args:
+		content (ScrollingFrame): Forge content container.
+
+	Returns:
+		None.
+]]
+local function clear_upgrade_rows(content: ScrollingFrame)
+	for _, child in ipairs(content:GetChildren()) do
+		if not child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+end
+
+--[[
+	Renders one facility or machine row in the Upgrade Forge.
+
+	Args:
+		content (ScrollingFrame): Row parent.
+		title_text (string): Facility/machine title.
+		detail_text (string): Active progression effect.
+		button_text (string): Upgrade button text.
+		enabled (boolean): Whether the purchase can be requested.
+		action (string): Soul Collection action.
+		payload (table): Action payload.
+
+	Returns:
+		None.
+]]
+local function render_upgrade_row(
+	content: ScrollingFrame,
+	title_text: string,
+	detail_text: string,
+	button_text: string,
+	enabled: boolean,
+	action: string,
+	payload: { [string]: any }
+)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -8, 0, 68)
+	row.BackgroundColor3 = Color3.fromRGB(24, 19, 30)
+	row.BorderSizePixel = 0
+	row.Parent = content
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = row
+
+	local title = make_upgrade_label(row, title_text, 14, true)
+	title.Position = UDim2.fromOffset(12, 9)
+	title.Size = UDim2.new(1, -156, 0, 20)
+
+	local detail = make_upgrade_label(
+		row,
+		detail_text,
+		11,
+		false
+	)
+	detail.Position = UDim2.fromOffset(12, 34)
+	detail.Size = UDim2.new(1, -156, 0, 20)
+	detail.TextColor3 = Color3.fromRGB(174, 161, 188)
+
+	local button = make_upgrade_button(row, button_text)
+	button.AnchorPoint = Vector2.new(1, 0.5)
+	button.Position = UDim2.new(1, -12, 0.5, 0)
+	button.Active = enabled
+	button.AutoButtonColor = enabled
+	if not enabled then
+		button.BackgroundColor3 = Color3.fromRGB(38, 36, 41)
+		button.TextColor3 = Color3.fromRGB(143, 137, 150)
+	end
+	button.Activated:Connect(function()
+		if enabled then
+			soul_remote:FireServer(action, payload)
+		end
+	end)
+end
+
+--[[
+	Renders the complete physical Upgrade Forge state.
+
+	Args:
+		snapshot (any): Current Soul Collection snapshot.
+
+	Returns:
+		None.
+]]
+local function render_upgrade_forge(snapshot: any)
+	local _, _, summary, _, content = get_upgrade_gui()
+	clear_upgrade_rows(content)
+
+	local essence = tonumber(snapshot.soulEssence) or 0
+	local discount = tonumber(
+		player:GetAttribute("PlotUpgradeDiscount")
+	) or 0
+	summary.Text = (
+		"Soul Essence: %d   •   Forge discount: %d%%"
+	):format(
+		essence,
+		math.floor(discount * 100 + 0.5)
+	)
+
+	for _, option in ipairs(snapshot.plotUpgradeOptions or {}) do
+		local id = tostring(option.id or "")
+		local name = tostring(option.name or id)
+		local level = tonumber(option.level) or 1
+		local plot_cap = tonumber(option.plotCap) or 1
+		local cost = tonumber(option.upgradeCost)
+		local effect = tostring(option.effect or "")
+		local next_effect = option.nextEffect
+		local enabled = cost ~= nil
+		local button_text = if cost
+			then ("Upgrade • %d"):format(cost)
+			else "MAX"
+
+		if id ~= "Plot" and level >= plot_cap and cost then
+			enabled = false
+			button_text = ("Plot Lv %d"):format(level + 1)
+		elseif cost and essence < cost then
+			enabled = false
+			button_text = ("Need %d"):format(cost)
+		end
+
+		local detail = ("Current: %s"):format(effect)
+		if next_effect then
+			detail ..= ("  →  %s"):format(tostring(next_effect))
+		end
+
+		render_upgrade_row(
+			content,
+			("%s • Lv %d"):format(name, level),
+			detail,
+			button_text,
+			enabled,
+			"UPGRADE_FACILITY",
+			{ facilityId = id }
+		)
+	end
+
+	for index, machine in ipairs(snapshot.machines or {}) do
+		local level = tonumber(machine.level) or 1
+		local cost = tonumber(machine.upgradeCost)
+		local enabled = cost ~= nil
+		local button_text = if cost
+			then ("Upgrade • %d"):format(cost)
+			else "MAX"
+		if cost and essence < cost then
+			enabled = false
+			button_text = ("Need %d"):format(cost)
+		end
+
+		render_upgrade_row(
+			content,
+			("Cloning Machine %d • Lv %d"):format(
+				index,
+				level
+			),
+			("Output storage: %d clone(s)"):format(
+				tonumber(machine.capacity) or 0
+			),
+			button_text,
+			enabled,
+			"UPGRADE_MACHINE",
+			{ machineId = tostring(machine.machineId or "") }
+		)
+	end
+end
+
+--[[
+	Opens the physical Foundry Upgrade Forge interface.
+
+	Args:
+		None.
+
+	Returns:
+		None.
+]]
+local function open_upgrade_forge()
+	local _, panel = get_upgrade_gui()
+	panel.Visible = true
+	if latest_snapshot then
+		render_upgrade_forge(latest_snapshot)
+	end
+	request_snapshot()
+end
+
+--[[
 	Opens the Soul Foundry interface.
 
 	Args:
@@ -714,9 +1087,13 @@ end
 		None.
 ]]
 local function activate_station(station_id: string)
+	if station_id == "Upgrades" then
+		open_upgrade_forge()
+		return
+	end
+
 	if station_id == "SoulFoundry"
 		or station_id == "Masters"
-		or station_id == "Upgrades"
 	then
 		open_soul_foundry()
 		return
@@ -778,11 +1155,33 @@ end
 		None.
 ]]
 local function on_soul_payload(payload: any)
-	if typeof(payload) ~= "table" or payload.kind ~= "SNAPSHOT" then
+	if typeof(payload) ~= "table" then
 		return
 	end
-	latest_snapshot = payload
-	schedule_base_render()
+
+	if payload.kind == "SNAPSHOT" then
+		latest_snapshot = payload
+		schedule_base_render()
+
+		local gui = player_gui:FindFirstChild(UPGRADE_GUI_NAME)
+		local panel = gui and gui:FindFirstChild("Panel")
+		if panel
+			and panel:IsA("GuiObject")
+			and panel.Visible
+		then
+			render_upgrade_forge(payload)
+		end
+		return
+	end
+
+	if payload.kind == "RESULT" then
+		local gui = player_gui:FindFirstChild(UPGRADE_GUI_NAME)
+		local panel = gui and gui:FindFirstChild("Panel")
+		local status = panel and panel:FindFirstChild("Status")
+		if status and status:IsA("TextLabel") then
+			status.Text = tostring(payload.message or "")
+		end
+	end
 end
 
 local zones = workspace:WaitForChild("Zones")

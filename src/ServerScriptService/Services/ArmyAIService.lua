@@ -172,6 +172,28 @@ local COMMAND_ARRIVAL_DISTANCE = 2.5
 local RETREAT_COMPLETE_DISTANCE = 18
 local RETREAT_SPEED_MULTIPLIER = 1.15
 
+--[[
+	Returns the player's current whole-army command range.
+
+	Formation War Room upgrades replicate ArmyCommandRange. The constant is
+	kept as a safe fallback for unloaded or legacy profiles.
+
+	Args:
+		player (Player): Commanding player.
+
+	Returns:
+		number: Maximum command distance in studs.
+]]
+local function get_command_max_distance(
+	player: Player
+): number
+	local value = player:GetAttribute("ArmyCommandRange")
+	if typeof(value) ~= "number" then
+		return COMMAND_MAX_DISTANCE
+	end
+	return math.max(COMMAND_MAX_DISTANCE, value)
+end
+
 -- Attack approach:
 local APPROACH_RADIUS_MIN = 2.5
 local APPROACH_RADIUS_MARGIN = 0.6
@@ -1645,7 +1667,9 @@ local function handle_command_request(
 			)
 			return
 		end
-		if (payload - player_root.Position).Magnitude > COMMAND_MAX_DISTANCE then
+		if (payload - player_root.Position).Magnitude
+			> get_command_max_distance(player)
+		then
 			send_command_feedback(
 				player,
 				get_command_state(player).mode,
@@ -1748,7 +1772,7 @@ local function handle_command_request(
 		local target_root = get_root(payload)
 		if not target_root
 			or (target_root.Position - player_root.Position).Magnitude
-				> COMMAND_MAX_DISTANCE
+				> get_command_max_distance(player)
 		then
 			send_command_feedback(
 				player,
@@ -1953,7 +1977,8 @@ local function tick_commanded_mode(
 
 		local target_root = get_root(target)
 		if not target_root
-			or (target_root.Position - player_pos).Magnitude > COMMAND_MAX_DISTANCE
+			or (target_root.Position - player_pos).Magnitude
+				> get_command_max_distance(player)
 		then
 			set_command(
 				player,

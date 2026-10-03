@@ -8,16 +8,20 @@ local Workspace = game:GetService("Workspace")
 local Remotes = require(
 	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
 )
+local PlotUpgradeConfig = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("PlotUpgradeConfig")
+)
 local SoulProfileStore = require(
 	script.Parent:WaitForChild("SoulProfileStore")
 )
 
 local SoulCollectionService = {}
 
-local PROFILE_VERSION = 2
+local PROFILE_VERSION = 3
 local STARTING_SOUL_ESSENCE = 60
 local STARTING_BASE_LEVEL = 1
-local MAX_BASE_LEVEL = 3
+local MAX_BASE_LEVEL = PlotUpgradeConfig.get_max_level()
 local MAX_MACHINE_LEVEL = 5
 local MAX_STARTER_UNITS_TO_SECURE = 3
 
@@ -29,11 +33,6 @@ local PROCESS_INTERVAL_SECONDS = 2
 local SAVE_DEBOUNCE_SECONDS = 1
 local BOSS_CLONE_COST_MULTIPLIER = 3
 local BOSS_CLONE_TIME_MULTIPLIER = 3
-
-local BASE_UPGRADE_COST: { [number]: number } = {
-	[2] = 100,
-	[3] = 250,
-}
 
 local ZONES_FOLDER_NAME = "Zones"
 local SAFE_ZONE_MODEL_NAME = "SafeZoneWorld"
@@ -79,6 +78,7 @@ type Profile = {
 	machines: { MachineState },
 	soul_essence: number,
 	base_level: number,
+	plot_upgrades: { [string]: number },
 	starter_secured_count: number,
 	progression: ProgressionState,
 	persistent: boolean,
@@ -144,6 +144,25 @@ local function create_default_progression(): ProgressionState
 	}
 end
 
+--[[
+	Creates level-one defaults for every Sanctum plot facility.
+
+	Args:
+		None.
+
+	Returns:
+		{ [string]: number }: Facility levels keyed by identifier.
+]]
+local function create_default_plot_upgrades(): { [string]: number }
+	local upgrades: { [string]: number } = {}
+	for _, facility_id in ipairs(
+		PlotUpgradeConfig.get_facility_order()
+	) do
+		upgrades[facility_id] = 1
+	end
+	return upgrades
+end
+
 local function create_default_profile(): Profile
 	local now = now_seconds()
 	return {
@@ -154,6 +173,7 @@ local function create_default_profile(): Profile
 		machines = { make_machine(1, now) },
 		soul_essence = STARTING_SOUL_ESSENCE,
 		base_level = STARTING_BASE_LEVEL,
+		plot_upgrades = create_default_plot_upgrades(),
 		starter_secured_count = 0,
 		progression = create_default_progression(),
 		persistent = false,
@@ -170,6 +190,68 @@ local function sanitize_positive_int(
 		return default_value
 	end
 	return math.max(0, math.floor(value))
+end
+
+--[[
+	Sanitizes persisted Sanctum facility levels.
+
+	Legacy profiles only contain base_level. Their Plot level is raised to
+	match the old Foundry level so existing progression is never lost.
+
+	Args:
+		raw (any): Persisted plot_upgrades table.
+		legacy_base_level (number): Existing Soul Foundry level.
+
+	Returns:
+		{ [string]: number }: Valid facility levels.
+]]
+local function sanitize_plot_upgrades(
+	raw: any,
+	legacy_base_level: number
+): { [string]: number }
+	local upgrades = create_default_plot_upgrades()
+	local max_level = PlotUpgradeConfig.get_max_level()
+
+	if typeof(raw) == "table" then
+		for _, facility_id in ipairs(
+			PlotUpgradeConfig.get_facility_order()
+		) do
+			local value = raw[facility_id]
+			if typeof(value) == "number" then
+				upgrades[facility_id] = math.clamp(
+					math.floor(value),
+					1,
+					max_level
+				)
+			end
+		end
+	end
+
+	upgrades.SoulFoundry = math.max(
+		upgrades.SoulFoundry,
+		math.clamp(
+			legacy_base_level,
+			STARTING_BASE_LEVEL,
+			MAX_BASE_LEVEL
+		)
+	)
+	upgrades.Plot = math.max(
+		upgrades.Plot,
+		upgrades.SoulFoundry
+	)
+
+	for _, facility_id in ipairs(
+		PlotUpgradeConfig.get_facility_order()
+	) do
+		if facility_id ~= "Plot" then
+			upgrades[facility_id] = math.min(
+				upgrades[facility_id],
+				upgrades.Plot
+			)
+		end
+	end
+
+	return upgrades
 end
 
 local function sanitize_skill_list(raw: any): { string }
@@ -316,11 +398,19 @@ local function sanitize_profile(
 		raw.soul_essence,
 		STARTING_SOUL_ESSENCE
 	)
-	profile.base_level = math.clamp(
-		sanitize_positive_int(raw.base_level, STARTING_BASE_LEVEL),
+	local legacy_base_level = math.clamp(
+		sanitize_positive_int(
+			raw.base_level,
+			STARTING_BASE_LEVEL
+		),
 		STARTING_BASE_LEVEL,
 		MAX_BASE_LEVEL
 	)
+	profile.plot_upgrades = sanitize_plot_upgrades(
+		raw.plot_upgrades,
+		legacy_base_level
+	)
+	profile.base_level = profile.plot_upgrades.SoulFoundry
 	profile.starter_secured_count = math.clamp(
 		sanitize_positive_int(raw.starter_secured_count, 0),
 		0,
@@ -349,6 +439,99 @@ end
 
 local function get_profile(player: Player): Profile?
 	return profiles_by_user_id[player.UserId]
+end
+
+--[[
+	Returns one persisted plot facility level.
+
+	Args:
+		profile (Profile): Player Soul profile.
+		facility_id (string): Plot facility identifier.
+
+	Returns:
+		number: Facility level from one to the configured maximum.
+]]
+local function get_plot_upgrade_level(
+	profile: Profile,
+	facility_id: string
+): number
+	local value = profile.plot_upgrades[facility_id]
+	if typeof(value) ~= "number" then
+		return 1
+	end
+	return math.clamp(
+		math.floor(value),
+		1,
+		PlotUpgradeConfig.get_max_level()
+	)
+end
+
+--[[
+	Sets a plot facility level and keeps legacy Foundry state synchronized.
+
+	Args:
+		profile (Profile): Player Soul profile.
+		facility_id (string): Plot facility identifier.
+		level (number): New level.
+
+	Returns:
+		None.
+]]
+local function set_plot_upgrade_level(
+	profile: Profile,
+	facility_id: string,
+	level: number
+)
+	local safe_level = math.clamp(
+		math.floor(level),
+		1,
+		PlotUpgradeConfig.get_max_level()
+	)
+	profile.plot_upgrades[facility_id] = safe_level
+	if facility_id == "SoulFoundry" then
+		profile.base_level = safe_level
+	end
+end
+
+--[[
+	Counts safely stored Masters in the profile.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		number: Number of stored Masters.
+]]
+local function count_masters(profile: Profile): number
+	local count = 0
+	for _ in pairs(profile.masters) do
+		count += 1
+	end
+	return count
+end
+
+--[[
+	Copies the facility-level map for persistence or client snapshots.
+
+	Args:
+		profile (Profile): Player Soul profile.
+
+	Returns:
+		{ [string]: number }: Independent facility-level table.
+]]
+local function copy_plot_upgrades(
+	profile: Profile
+): { [string]: number }
+	local result: { [string]: number } = {}
+	for _, facility_id in ipairs(
+		PlotUpgradeConfig.get_facility_order()
+	) do
+		result[facility_id] = get_plot_upgrade_level(
+			profile,
+			facility_id
+		)
+	end
+	return result
 end
 
 local function get_safe_zone_region(): BasePart?
@@ -483,13 +666,26 @@ local function get_clone_seconds(
 end
 
 local function get_machine_upgrade_cost(
+	profile: Profile,
 	machine: MachineState
 ): number
-	return 60 * machine.level
+	local base_cost = 60 * machine.level
+	local forge_level = get_plot_upgrade_level(
+		profile,
+		"UpgradeForge"
+	)
+	return PlotUpgradeConfig.apply_forge_discount(
+		base_cost,
+		forge_level
+	)
 end
 
 local function get_base_upgrade_cost(profile: Profile): number?
-	return BASE_UPGRADE_COST[profile.base_level + 1]
+	return PlotUpgradeConfig.get_upgrade_cost(
+		"SoulFoundry",
+		get_plot_upgrade_level(profile, "SoulFoundry"),
+		get_plot_upgrade_level(profile, "UpgradeForge")
+	)
 end
 
 local function find_machine(
@@ -684,6 +880,7 @@ local function build_persistence_snapshot(profile: Profile)
 		machines = machines,
 		soul_essence = profile.soul_essence,
 		base_level = profile.base_level,
+		plot_upgrades = copy_plot_upgrades(profile),
 		starter_secured_count = profile.starter_secured_count,
 		progression = copy_progression(profile.progression),
 	}
@@ -729,7 +926,7 @@ local function machine_client_snapshot(
 		secondsRemaining = seconds_remaining,
 		paused = machine.paused,
 		upgradeCost = if machine.level < MAX_MACHINE_LEVEL
-			then get_machine_upgrade_cost(machine)
+			then get_machine_upgrade_cost(profile, machine)
 			else nil,
 	}
 end
@@ -747,6 +944,42 @@ local function build_client_snapshot(
 		)
 	end
 
+	local plot_upgrades = copy_plot_upgrades(profile)
+	local upgrade_options = {}
+	local forge_level = get_plot_upgrade_level(
+		profile,
+		"UpgradeForge"
+	)
+
+	for _, facility_id in ipairs(
+		PlotUpgradeConfig.get_facility_order()
+	) do
+		local level = plot_upgrades[facility_id]
+		table.insert(upgrade_options, {
+			id = facility_id,
+			name = PlotUpgradeConfig.get_name(facility_id),
+			level = level,
+			effect = PlotUpgradeConfig.get_effect_text(
+				facility_id,
+				level
+			),
+			nextEffect = if level
+					< PlotUpgradeConfig.get_max_level()
+				then PlotUpgradeConfig.get_effect_text(
+					facility_id,
+					level + 1
+				)
+				else nil,
+			upgradeCost =
+				PlotUpgradeConfig.get_upgrade_cost(
+					facility_id,
+					level,
+					forge_level
+				),
+			plotCap = plot_upgrades.Plot,
+		})
+	end
+
 	return {
 		kind = "SNAPSHOT",
 		revision = profile.revision,
@@ -755,6 +988,8 @@ local function build_client_snapshot(
 		soulEssence = profile.soul_essence,
 		baseLevel = profile.base_level,
 		baseUpgradeCost = get_base_upgrade_cost(profile),
+		plotUpgrades = plot_upgrades,
+		plotUpgradeOptions = upgrade_options,
 		progression = copy_progression(profile.progression),
 		units = copy_records(profile.units),
 		masters = masters_as_array(profile),
@@ -774,6 +1009,69 @@ local function update_player_attributes(
 	player:SetAttribute("SoulEssence", profile.soul_essence)
 	player:SetAttribute("SoulBaseLevel", profile.base_level)
 	player:SetAttribute("SoulMachineCount", #profile.machines)
+
+	local plot_level = get_plot_upgrade_level(profile, "Plot")
+	local formation_level = get_plot_upgrade_level(
+		profile,
+		"Formation"
+	)
+	local skill_level = get_plot_upgrade_level(
+		profile,
+		"SkillReliquary"
+	)
+	local codex_level = get_plot_upgrade_level(profile, "Codex")
+	local master_level = get_plot_upgrade_level(
+		profile,
+		"MasterGallery"
+	)
+	local trophy_level = get_plot_upgrade_level(
+		profile,
+		"TrophyHall"
+	)
+	local forge_level = get_plot_upgrade_level(
+		profile,
+		"UpgradeForge"
+	)
+
+	player:SetAttribute("PlotLevel", plot_level)
+	player:SetAttribute(
+		"SoulFoundryLevel",
+		get_plot_upgrade_level(profile, "SoulFoundry")
+	)
+	player:SetAttribute("FormationLevel", formation_level)
+	player:SetAttribute("SkillReliquaryLevel", skill_level)
+	player:SetAttribute("CodexLevel", codex_level)
+	player:SetAttribute("MasterGalleryLevel", master_level)
+	player:SetAttribute("TrophyHallLevel", trophy_level)
+	player:SetAttribute("UpgradeForgeLevel", forge_level)
+	player:SetAttribute(
+		"ArmyCommandRange",
+		PlotUpgradeConfig.get_command_range(formation_level)
+	)
+	player:SetAttribute(
+		"SkillCooldownMultiplier",
+		PlotUpgradeConfig.get_skill_cooldown_multiplier(
+			skill_level
+		)
+	)
+	player:SetAttribute(
+		"DissolveEssenceMultiplier",
+		PlotUpgradeConfig.get_dissolve_multiplier(
+			codex_level
+		)
+	)
+	player:SetAttribute(
+		"MasterStorageCapacity",
+		PlotUpgradeConfig.get_master_capacity(master_level)
+	)
+	player:SetAttribute(
+		"BossTrophySlots",
+		PlotUpgradeConfig.get_trophy_slots(trophy_level)
+	)
+	player:SetAttribute(
+		"PlotUpgradeDiscount",
+		PlotUpgradeConfig.get_forge_discount(forge_level)
+	)
 end
 
 local function send_snapshot(player: Player)
@@ -937,6 +1235,19 @@ local function imprint_master(
 		return false, "That Master is already marked for deployment."
 	end
 
+	local gallery_level = get_plot_upgrade_level(
+		profile,
+		"MasterGallery"
+	)
+	local capacity = PlotUpgradeConfig.get_master_capacity(
+		gallery_level
+	)
+	if count_masters(profile) >= capacity then
+		return false, (
+			"Master Gallery is full (%d/%d). Upgrade it first."
+		):format(count_masters(profile), capacity)
+	end
+
 	record = remove_unit_at(profile, index)
 	record.acquisition_kind = "Master"
 	profile.masters[record.record_id] = record
@@ -964,7 +1275,15 @@ local function dissolve_unit(
 	end
 
 	record = remove_unit_at(profile, index)
-	local gained = get_dissolve_value(record)
+	local codex_level = get_plot_upgrade_level(profile, "Codex")
+	local multiplier =
+		PlotUpgradeConfig.get_dissolve_multiplier(codex_level)
+	local gained = math.max(
+		1,
+		math.floor(
+			get_dissolve_value(record) * multiplier + 0.5
+		)
+	)
 	profile.soul_essence += gained
 	process_profile(profile, now_seconds())
 	mark_changed(player, profile, true)
@@ -1154,7 +1473,7 @@ local function upgrade_machine(
 		return false, "Machine is already fully upgraded."
 	end
 
-	local cost = get_machine_upgrade_cost(machine)
+	local cost = get_machine_upgrade_cost(profile, machine)
 	if profile.soul_essence < cost then
 		return false, ("Need %d Soul Essence."):format(cost)
 	end
@@ -1171,31 +1490,91 @@ local function upgrade_machine(
 	)
 end
 
-local function upgrade_base(
-	player: Player
+--[[
+	Upgrades one physical Sanctum facility.
+
+	Every facility except the Plot itself is capped by Plot level. Soul
+	Essence is the single upgrade currency, and the Upgrade Forge discounts
+	all other facility purchases.
+
+	Args:
+		player (Player): Player buying the upgrade.
+		facility_id (string): Facility identifier.
+
+	Returns:
+		boolean, string: Success and user-facing result.
+]]
+local function upgrade_facility(
+	player: Player,
+	facility_id: string
 ): (boolean, string)
 	local profile, err = require_safe_zone(player)
 	if not profile then
 		return false, err or "Profile unavailable."
 	end
-	if profile.base_level >= MAX_BASE_LEVEL then
-		return false, "Soul Foundry is already fully upgraded."
+	if not PlotUpgradeConfig.is_valid_facility(facility_id) then
+		return false, "Unknown Sanctum facility."
 	end
 
-	local cost = get_base_upgrade_cost(profile)
-	if not cost or profile.soul_essence < cost then
-		return false, ("Need %d Soul Essence."):format(
-			cost or 0
-		)
+	local current_level = get_plot_upgrade_level(
+		profile,
+		facility_id
+	)
+	local max_level = PlotUpgradeConfig.get_max_level()
+	if current_level >= max_level then
+		return false, (
+			"%s is already fully upgraded."
+		):format(PlotUpgradeConfig.get_name(facility_id))
+	end
+
+	local plot_level = get_plot_upgrade_level(profile, "Plot")
+	if facility_id ~= "Plot"
+		and current_level >= plot_level
+	then
+		return false, (
+			"Upgrade your Sanctum Plot to level %d first."
+		):format(current_level + 1)
+	end
+
+	local forge_level = get_plot_upgrade_level(
+		profile,
+		"UpgradeForge"
+	)
+	local cost = PlotUpgradeConfig.get_upgrade_cost(
+		facility_id,
+		current_level,
+		forge_level
+	)
+	if not cost then
+		return false, "That facility cannot be upgraded."
+	end
+	if profile.soul_essence < cost then
+		return false, ("Need %d Soul Essence."):format(cost)
 	end
 
 	profile.soul_essence -= cost
-	profile.base_level += 1
-	ensure_machine_count(profile)
-	mark_changed(player, profile, true)
-	return true, ("Soul Foundry upgraded to level %d."):format(
-		profile.base_level
+	local new_level = current_level + 1
+	set_plot_upgrade_level(
+		profile,
+		facility_id,
+		new_level
 	)
+
+	if facility_id == "SoulFoundry" then
+		ensure_machine_count(profile)
+	end
+
+	mark_changed(player, profile, true)
+	return true, ("%s upgraded to level %d."):format(
+		PlotUpgradeConfig.get_name(facility_id),
+		new_level
+	)
+end
+
+local function upgrade_base(
+	player: Player
+): (boolean, string)
+	return upgrade_facility(player, "SoulFoundry")
 end
 
 local function handle_remote(
@@ -1258,8 +1637,50 @@ local function handle_remote(
 			player,
 			tostring(payload.machineId or "")
 		)
+	elseif action == "UPGRADE_FACILITY" then
+		ok, message = upgrade_facility(
+			player,
+			tostring(payload.facilityId or "")
+		)
 	elseif action == "UPGRADE_BASE" then
 		ok, message = upgrade_base(player)
+	elseif RunService:IsStudio()
+		and action == "DEBUG_RESET_PROFILE"
+	then
+		local profile = create_default_profile()
+		profiles_by_user_id[player.UserId] = profile
+		profile.dirty = true
+		update_player_attributes(player, profile)
+		send_snapshot(player)
+		ok = true
+		message = "Studio Soul profile reset."
+	elseif RunService:IsStudio()
+		and action == "DEBUG_ADD_ESSENCE"
+	then
+		local profile = get_profile(player)
+		local amount = tonumber(payload.amount) or 0
+		if profile then
+			profile.soul_essence = math.max(
+				0,
+				profile.soul_essence + math.floor(amount)
+			)
+			mark_changed(player, profile, true)
+			ok = true
+			message = "Studio Soul Essence adjusted."
+		else
+			message = "Profile unavailable."
+		end
+	elseif RunService:IsStudio()
+		and action == "DEBUG_RELOAD_PROFILE"
+	then
+		if save_profile_now(player) then
+			profiles_by_user_id[player.UserId] = nil
+			load_profile(player)
+			ok = true
+			message = "Studio Soul profile reloaded."
+		else
+			message = "Studio profile save failed."
+		end
 	end
 
 	send_result(player, ok, message)
@@ -1500,6 +1921,34 @@ function SoulCollectionService.upgrade_base(
 	player: Player
 ): (boolean, string)
 	return upgrade_base(player)
+end
+
+function SoulCollectionService.upgrade_facility(
+	player: Player,
+	facility_id: string
+): (boolean, string)
+	return upgrade_facility(player, facility_id)
+end
+
+function SoulCollectionService.get_plot_upgrade_level(
+	player: Player,
+	facility_id: string
+): number
+	local profile = get_profile(player)
+	if not profile then
+		return 1
+	end
+	return get_plot_upgrade_level(profile, facility_id)
+end
+
+function SoulCollectionService.get_plot_upgrades(
+	player: Player
+): { [string]: number }
+	local profile = get_profile(player)
+	if not profile then
+		return create_default_plot_upgrades()
+	end
+	return copy_plot_upgrades(profile)
 end
 
 function SoulCollectionService.get_snapshot_for_test(
