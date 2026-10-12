@@ -1027,3 +1027,57 @@ The first Phase 12 slice is:
 6. Run soft-launch balance and retention instrumentation checks.
 7. In a published test place, smoke-test the Phase 11 reserved-server and
    Join Friend cross-server network branches before launch.
+
+## Post-launch update - Unit abilities and specialisation paths
+
+**Status: PLANNED - FUTURE UPDATE ONLY. NOT part of the base-game launch or
+Phase 12 acceptance.**
+
+**Release gate:** Begin this update only after the base game is finished,
+tested, published, and its core combat, army commands, persistence, performance,
+and eight-player matchmaking have passed live-server acceptance. Do not delay
+the initial release to implement this update. Reassess the scope using early
+player feedback and performance data.
+
+### Update stage A - Distinct unit skills and battlefield roles
+
+- Give different factions and combat roles distinctive automatic skills, with
+  clear cooldowns, animations, targeting rules, and readable effects.
+- Introduce healer/support units that prioritise injured allies and protect
+  vulnerable frontline units; frost casters that deal damage and slow targets;
+  and other complementary skills such as shields, fire damage-over-time,
+  poison/plague, crowd control, and ranged piercing attacks.
+- Extend both player-army and NPC-army AI to use these abilities intelligently
+  while moving, holding ground, following, and engaging in local combat.
+- Ensure counterplay, reasonable status-effect stacking, diminishing returns,
+  and performance under large-army load. More diverse armies should reward
+  composition and tactics, not just higher damage numbers.
+- Test mixed-role compositions in PvE, PvP, and large-group engagements.
+
+### Update stage B - Individual unit upgrades and branching specialisations
+
+- Add experience or equivalent mastery for individual, permanently acquired
+  units. Progress should come from meaningful combat participation, not
+  passive farming or temporary starter-loan units.
+- Unlock mutually exclusive specialisation paths that change a unit's skills,
+  strengths, and combat role. Example: Skeleton Knight -> defensive Bone
+  Guardian OR offensive Death Reaver; caster -> Frost, Fire, or Necrotic path.
+- Integrate research and unlock requirements into the existing Codex, using
+  unit knowledge, Soul Essence, and optional rare skillbooks/materials. Do not
+  add a mandatory new building just for this feature.
+- Preserve trained units through existing extraction, Reserve Crypt, Master
+  imprinting, and Cloning Chamber flows. Define how upgrades and skill
+  specialisations are inherited by clones and priced/balanced before release.
+- Ensure unit experience, chosen paths, abilities, and clone inheritance
+  persist correctly through deaths, saves, reconnects, and cross-server travel.
+- Balance for tactical variety: an intelligently composed army should have a
+  realistic chance against a larger or more upgraded but poorly composed one.
+
+**Acceptance for this future update:** automatic healer/frost/support combat
+behaviour; clear ability VFX/cooldowns; two working mutually exclusive upgrade
+paths for at least one unit family; Codex unlocks; secure persistence and clone
+inheritance; and large-army multiplayer performance/regression tests.
+
+**Not now:** Focus current development on completing and playtesting the
+existing base game, polishing NPC coordination and combat feel, and finishing
+Phase 12 launch acceptance before starting this feature update.
